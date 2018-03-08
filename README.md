@@ -14,3 +14,5 @@ Once the text file is ready, just run POKEY2MIDI on it as per instructions.
 The examples given were all created with the default settings.
 
 This is a work in progress, and some POKEY features are still not properly handled.
+
+Some tags to help others looking for this program: "pokey2mid", "sap2mid", "sap2midi", "POKEY to MID", "SAP to MIDI", "SAP to MID"
