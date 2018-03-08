@@ -602,9 +602,15 @@ class Converter(object):
 				if l == "NO RESPONSE": # Stop at end of POKEY data, if any (for finite songs)
 					break
 				
-				# Extract timestamp from the rest
-				tokens = l.split(" ")
-				t, data = float(tokens[0]), (" ".join(tokens[1:])).split("|")
+				if ":" in l: # default asapscan format detected
+					print("\nERROR")
+					print("POKEY2MIDI requires a slightly modified version of asapscan to work.")
+					print("Please, see instructions at: https://github.com/1ucasvb/pokey2midi")
+					exit()
+				else:
+					# Extract timestamp from the rest
+					tokens = l.split(" ")
+					t, data = float(tokens[0]), (" ".join(tokens[1:])).split("|")
 				
 				if not setup: # Setup metadata if we just parsed the first line
 					numPOKEY = len(data)
