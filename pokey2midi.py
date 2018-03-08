@@ -159,6 +159,12 @@ class POKEY(object):
 		if self.volctrl[ch-1]: # DC mode means no note available, has to be transcribed by hand!
 			return 0
 		
+		# TODO: For now only, we'll only handle non-distorted notes, which make the bulk of 
+		# the melody for most songs.
+		# The noise will have to be handled in a better way.
+		if self.poly[ch-1] not in [5,6,7]:
+			return 0
+		
 		# TODO: figure out if the clock modifies fout of ch 4 and 2 or just 3 and 1
 		# It's unclear if Fin is technically considered 1.79 MHz for 4/2 getting clocked with 3/1
 		# if 3/1 are at 1.79 MHz
@@ -222,20 +228,21 @@ class POKEY(object):
 		# TODO: Actually figure out how to map these noises to something more useful (percussions or
 		# seashore/helicopter/drum instruments, etc)
 		# 17 and 9 polys are basically noise, no need to count it properly as they have no
-		# discernible frequency. For now, we'll assume some other period that maps most common notes
-		# to the mid-range to be used later
-		T_POLY9 = 80
-		T_POLY17 = 80
+		# discernible frequency. For now, we could assume some other period that maps most common
+		# notes to the mid-range to be used later
+		# T_POLY9 = 80
+		# T_POLY17 = 80
+		# But that's not really useful, is it?
 		
 		# The periods of the 8 polys, given by the specifications (slightly modified)
 		periods = [
-			T_POLY17 * T_POLY5,    # 0=0b000	17 Bit poly * 5 Bit poly - White noise
-			T_POLY5,               # 1=0b001	5 Bit poly
-			T_POLY4 * T_POLY5,     # 2=0b010	4 Bit poly * 5 Bit poly - Rumble
-			T_POLY5,               # 3=0b011	5 Bit poly - Softer noise
-			T_POLY17,              # 4=0b100	17 Bit poly
+			T_POLY17 * T_POLY5,    # 0=0b000	17 Bit poly + 5 Bit poly = Noise
+			T_POLY5,               # 1=0b001	5 Bit poly = Rumble
+			T_POLY4 * T_POLY5,     # 2=0b010	4 Bit poly + 5 Bit poly = Rumble
+			T_POLY5,               # 3=0b011	5 Bit poly = Rumble
+			T_POLY17,              # 4=0b100	17 Bit poly = Soft noise
 			T_PURE,                # 5=0b101	Pure Tone
-			T_POLY4,               # 6=0b110	4 Bit poly
+			T_POLY4,               # 6=0b110	4 Bit poly - Buzzing
 			T_PURE                 # 7=0b111	Same as #5 (Not documented)
 		]
 		
@@ -244,7 +251,7 @@ class POKEY(object):
 			periods[0] = T_POLY9 * T_POLY5
 			periods[4] = T_POLY9
 		
-		# TODO: Handle 0,4, which is basically noise. What to do about the 5-bit though?
+		# TODO: Handle 0-4 which is basically noise. What to do about the 5-bit though?
 		
 		# Now, we multiply N by these periods to obtain the proper note corrected for timbre
 		N *= periods[self.poly[ch-1]]
@@ -276,9 +283,9 @@ class POKEY(object):
 		else:
 			note = math.ceil(n)
 		
-		if note < 0 or note > 255:
+		if note < -21 or note > 234 and self.vol[ch-1] > 0:
 			if DEBUG:
-				print("Warning: Couldn't handle note '%d' of POKEY %d, channel %d" % (
+				print("\nWarning: Couldn't handle audible note '%d' of POKEY %d, channel %d" % (
 					note, self.number, ch
 				))
 				errstate = dict()
