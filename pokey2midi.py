@@ -1,5 +1,5 @@
 '''
-	POKEY2MIDI v0.61
+	POKEY2MIDI v0.63
 	by LucasVB (http://1ucasvb.com/)
 	
 	Description:
@@ -21,6 +21,10 @@
 	
 		Handle poly periods properly, check emulator
 		Verify highpass behavior
+		
+		Map noise poly to GM instruments
+			Might need to fine-tune frequency range?
+			What about percussions?
 '''
 
 import os
@@ -29,7 +33,7 @@ import struct
 import argparse
 
 # Constants
-VERSION				= "0.61"
+VERSION				= "0.63"
 NTSC				= 0
 PAL					= 1
 NOTES				= ['A','A#','B','C','C#','D','D#','E','F','F#','G','G#']
@@ -37,6 +41,7 @@ ENABLE_16BIT		= True
 DEFAULT_TIMEBASE 	= 480
 DEFAULT_TEMPO 		= 60
 DEBUG				= False
+POLY_INSTRUMENT		= [0,0,0,0,0,80,87,80] # TODO: find the rest
 
 # Human-readable POKEY state and other goodies
 class POKEY(object):
@@ -411,6 +416,13 @@ class MIDI(object):
 		self.addEvent( track, time, [
 			'Ctrl', channel, ctrl, value
 		])
+		
+	# Add a Program (Instrument) Change event
+	def progChange(self, track, time, channel, inst):
+		time -= self.timeOffset
+		self.addEvent( track, time, [
+			'Prog', channel, inst
+		])
 	
 	# Convert time in seconds to MIDI ticks
 	def timeToTicks(self, time):
@@ -473,6 +485,11 @@ class MIDI(object):
 							mf.write(struct.pack("=B", 0xB0 + channel))
 							mf.write(struct.pack("=B", ctrl))
 							mf.write(struct.pack("=B", val))
+						if ev[0] == "Prog":
+							mf.write(self.variableLengthNumber(delta))
+							channel, inst = ev[1:]
+							mf.write(struct.pack("=B", 0xC0 + channel))
+							mf.write(struct.pack("=B", inst))
 					ltick = tick
 					
 				# // end generated track data
@@ -577,6 +594,8 @@ class Converter(object):
 		# Don't use note velocities for note loudness. Use the channel volume instead.
 		# TODO: Fix potential issue with multiple tracks on same channel
 		self.UseChannelVolume = False
+		# Assign MIDI instruments to MIDI channels to emulate the original POKEY sound
+		self.UseInstruments = True
 	
 	# Get a string tag for a given voice
 	# A voice exist for each instrument for each channel for each POKEY
@@ -768,6 +787,13 @@ class Converter(object):
 						# If we are using the channel volume, we update it here before the note
 						if self.UseChannelVolume:
 							midi.ctrlChange(midi_track, t, midi_ch, 0x07, ch_vol)
+						if self.UseInstruments:
+							midi.progChange(
+								midi_track, t, midi_ch,
+								POLY_INSTRUMENT[state['poly'][ch]]
+							)
+							
+							
 						# Add Note On event
 						midi.noteOn(midi_track, t, midi_ch, midi_note, midi_vol) 
 						active_note[pn][ch] = {
@@ -804,6 +830,7 @@ if __name__ == "__main__":
 	parser.add_argument('-nosplit', action='store_false', help="Do not split different polynomial counter settings for channels as separate instrument tracks, which happens by default.")
 	parser.add_argument('-nomerge', action='store_false', help="Do not merge volume decays into a single MIDI note, which happens by default. Ignored if -all is used.")
 	parser.add_argument('-usevol', action='store_true', help="Use MIDI channel volume instead of note velocity. This is similar to how it happens in the actual chip.")
+	parser.add_argument('-useinst', action='store_true', help="Assign MIDI instruments to emulate the original POKEY sound.")
 	parser.add_argument('-boost', metavar='factor', nargs=1, type=float, help="Multiply note velocities by a factor. Useful if MIDI is too quiet. Use a large number (> 16) without -usevol to make all notes have the same max loudness.")
 	parser.add_argument('-bpm', nargs=1, type=float, help="Assume a given tempo in beats per minute (BPM), as precisely as you want. Default is %d. If the song's BPM is known precisely, this option makes the MIDI notes align with the beats, which makes using the MIDI in other places much easier. Doesn't work if the song has a dynamic tempo." % DEFAULT_TEMPO)
 	parser.add_argument('-timebase', nargs=1, type=int, help="Force a given MIDI timebase, the number of ticks in a beat (quarter note). Default is %d." % DEFAULT_TIMEBASE)
@@ -818,6 +845,7 @@ if __name__ == "__main__":
 	converter.TrimSilence = args.notrim
 	converter.SplitPolyAsTracks = args.nosplit
 	converter.UseChannelVolume = args.usevol
+	converter.UseInstruments = args.useinst
 	if args.boost is not None:
 		converter.BoostVelocity = args.boost[0]
 	if args.bpm is not None:
