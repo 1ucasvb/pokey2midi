@@ -1,5 +1,5 @@
 '''
-	POKEY2MIDI v0.6
+	POKEY2MIDI v0.61
 	by LucasVB (http://1ucasvb.com/)
 	
 	Description:
@@ -29,17 +29,18 @@ import struct
 import argparse
 
 # Constants
-VERSION				= "0.6"
+VERSION				= "0.61"
 NTSC				= 0
 PAL					= 1
 NOTES				= ['A','A#','B','C','C#','D','D#','E','F','F#','G','G#']
 ENABLE_16BIT		= True
 DEFAULT_TIMEBASE 	= 480
 DEFAULT_TEMPO 		= 60
+DEBUG				= False
 
 # Human-readable POKEY state and other goodies
 class POKEY(object):
-	def __init__(self, mode=None):
+	def __init__(self, number, mode=None):
 		if mode is None:
 			self.mode = NTSC
 		else:
@@ -50,6 +51,7 @@ class POKEY(object):
 		self.volctrl	= [0,0,0,0] # volume-only mode (used for PCM digital audio)
 		self.poly		= [0,0,0,0] # channel polynomial counter data
 		self._state		= dict() # internal state
+		self.number		= number # POKEY number
 	
 	# The availalbe clock frquencies in Hz
 	@property
@@ -274,6 +276,31 @@ class POKEY(object):
 		else:
 			note = math.ceil(n)
 		
+		if note < 0 or note > 255:
+			if DEBUG:
+				print("Warning: Couldn't handle note '%d' of POKEY %d, channel %d" % (
+					note, self.number, ch
+				))
+				errstate = dict()
+				errstate['audf']		= list(self.audf)
+				errstate['freqs']		= list([
+												self.getFrequency(1), self.getFrequency(2),
+												self.getFrequency(3), self.getFrequency(4)
+											])
+				errstate['vol']			= list(self.vol)
+				errstate['volctrl']		= list(self.volctrl)
+				errstate['poly']		= list(self.poly)
+				errstate['use15khz']	= self.use15khz
+				errstate['highpass2w4']	= self.highpass2w4
+				errstate['highpass1w3']	= self.highpass1w3
+				errstate['join4and3']	= self.join4and3
+				errstate['join2and1']	= self.join2and1
+				errstate['clock3mhz']	= self.clock3mhz
+				errstate['clock1mhz']	= self.clock1mhz
+				errstate['poly17as9']	= self.poly17as9
+				print("POKEY state:", errstate)
+			return [None, None, 0]
+		
 		# TODO: export human-readable note names?
 		notename = NOTES[note % 12] + "%d" % ((note + 9) // 12) # human-readable name
 		return (note, notename, freq) # (piano key, note name, frequency)
@@ -318,6 +345,7 @@ class MIDI(object):
 	
 	# Writes variable length number, as per MIDI standard
 	def variableLengthNumber(self, num):
+		assert num >= 0
 		lst = struct.pack("=B",num & 0x7f)
 		while 1:
 			num = num >> 7
@@ -464,7 +492,7 @@ class Song(object):
 	
 	# Initializes POKEYs
 	def initPOKEY(self, n):
-		self.pokeys = [POKEY() for p in range(n)]
+		self.pokeys = [POKEY(pn) for pn in range(n)]
 		print( "%d POKEY found" % n )
 	
 	# Add a new POKEY state
