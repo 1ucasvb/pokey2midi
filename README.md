@@ -7,7 +7,7 @@ However, the program is a bit useless as it is, and you'll have to recompile it 
 
 Note: the compilation of ASAP requires Cito (http://cito.sourceforge.net)
 
-The original version of `asapscan` only outputs timestamps with 2 decimal points of precision, which is insufficient for our purpose.
+The original version of `asapscan` only outputs timestamps with 2 decimal digits of precision, which is insufficient for our purpose.
 
 The relevant lines are found in `asapscan.c`:
 
