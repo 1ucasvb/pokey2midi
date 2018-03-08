@@ -24,7 +24,7 @@ The relevant lines are found in `asapscan.c`:
     	printf("\n");
     }
 
-Change that `"%6.2f: "` in the first `printf` to "%6.6f ", which will now output 6 digits after the decimal:
+Change that `"%6.2f: "` in the first `printf` to `"%6.6f "`, which will now output 6 digits after the decimal:
 
     printf("%6.6f ", (double) frame * CYCLES_PER_FRAME / MAIN_CLOCK);
 
