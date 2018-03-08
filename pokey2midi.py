@@ -824,7 +824,7 @@ class Converter(object):
 
 # If running by itself, handle command line options
 if __name__ == "__main__":
-	parser = argparse.ArgumentParser(description="POKEY2MIDI v%s by LucasVB (http://1ucasvb.com)\nConverts textual POKEY dumps from asapscan into MIDI files." % VERSION)
+	parser = argparse.ArgumentParser(description="POKEY2MIDI v%s by LucasVB (http://1ucasvb.com)\nConverts textual POKEY dumps from (a slightly modified) asapscan into MIDI files." % VERSION)
 	parser.add_argument('-all', action='store_true', help="Use all notes by always retriggering. Useful for when notes are being missed. Overrides note merging.")
 	parser.add_argument('-notrim', action='store_false', help="Do not trim initial silence, which happens by default.")
 	parser.add_argument('-nosplit', action='store_false', help="Do not split different polynomial counter settings for channels as separate instrument tracks, which happens by default.")
