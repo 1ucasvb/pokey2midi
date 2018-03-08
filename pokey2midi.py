@@ -25,6 +25,8 @@
 		Map noise poly to GM instruments
 			Might need to fine-tune frequency range?
 			What about percussions?
+		
+		Option to ignore all volume information and merge notes maximally?
 '''
 
 import os
@@ -251,7 +253,7 @@ class POKEY(object):
 			T_PURE                 # 7=0b111	Same as #5 (Not documented)
 		]
 		
-		# If AUDCTl is set to use a 9-bit poly instead of 17-bit, we change it
+		# If AUDCTL is set to use a 9-bit poly instead of 17-bit, we change it
 		if self.poly17as9:
 			periods[0] = T_POLY9 * T_POLY5
 			periods[4] = T_POLY9
@@ -596,11 +598,13 @@ class Converter(object):
 		self.UseChannelVolume = False
 		# Assign MIDI instruments to MIDI channels to emulate the original POKEY sound
 		self.UseInstruments = False
+		# Custom instruments to use
+		self.CustomInstruments = None
 	
 	# Get a string tag for a given voice
-	# A voice exist for each instrument for each channel for each POKEY
-	# If We are not splitting different polynomial counters as instruments, the channels are the
-	# voices
+	# A voice exists for each instrument for each channel for each POKEY
+	# If we are not splitting different polynomial counters as instruments, the channels are the
+	# voices themselves
 	def voice(self, pn, ch, poly):
 		if self.SplitPolyAsTracks:
 			return "%d %s %s" % (pn, ch, poly)
@@ -615,8 +619,8 @@ class Converter(object):
 			return
 		self.file = file
 		
-		setup = False # If the basic information is setup or not, set to True after firt line read
-		song = Song(self) #  The song object which will handle things
+		setup = False # If the basic information is setup or not, set to True after first line read
+		song = Song(self) # The song object which will handle things
 		
 		# Read raw POKEY data into song
 		print("Opening \"%s\"" % self.file)
@@ -642,7 +646,7 @@ class Converter(object):
 					numPOKEY = len(data)
 					# Assume zeroed out registers initially
 					last_data = [bytes.fromhex("00"*9)] * numPOKEY
-					# Initialize pokeys
+					# Initialize POKEYs
 					song.initPOKEY(numPOKEY)
 					setup = True
 				
@@ -718,7 +722,7 @@ class Converter(object):
 					vol = state['vol'][ch]
 					
 					# Volume used in MIDI (note velocity), with boost and 0-127 range
-					midi_vol = max(0,min(127,int(state['vol'][ch] / 15 * 127 * self.BoostVelocity)))
+					midi_vol = max(0,min(127,int(vol / 15 * 127 * self.BoostVelocity)))
 					
 					# If we are using channel volumes for the volume data, as opposed to note
 					# velocity, then we always play the loudest note, but control the effect with
@@ -741,8 +745,11 @@ class Converter(object):
 							if self.UseChannelVolume:
 								# If we're using the channel volume, we update it if changed, 
 								# instead of sending a new note. No need to kill.
-								if active_note[pn][ch]['vol'] != vol and vol > 0:
-									midi.ctrlChange(midi_track, t, midi_ch, 0x07, ch_vol)
+								# But ONLY if it's the same note!
+								if active_note[pn][ch]['note'] == midi_note and \
+									active_note[pn][ch]['vol'] != vol and \
+									vol > 0:
+										midi.ctrlChange(midi_track, t, midi_ch, 0x07, ch_vol)
 							else:
 								# Otherwise, we kill if the note is rising. This usually means
 								# a re-trigger of the note in the actual music.
@@ -788,9 +795,13 @@ class Converter(object):
 						if self.UseChannelVolume:
 							midi.ctrlChange(midi_track, t, midi_ch, 0x07, ch_vol)
 						if self.UseInstruments:
+							if self.CustomInstruments:
+								inst = self.CustomInstruments[state['poly'][ch]]
+							else:
+								inst = POLY_INSTRUMENT[state['poly'][ch]]
 							midi.progChange(
 								midi_track, t, midi_ch,
-								POLY_INSTRUMENT[state['poly'][ch]]
+								inst
 							)
 							
 							
@@ -824,16 +835,17 @@ class Converter(object):
 
 # If running by itself, handle command line options
 if __name__ == "__main__":
-	parser = argparse.ArgumentParser(description="POKEY2MIDI v%s by LucasVB (http://1ucasvb.com)\nConverts textual POKEY dumps from (a slightly modified) asapscan into MIDI files." % VERSION)
-	parser.add_argument('-all', action='store_true', help="Use all notes by always retriggering. Useful for when notes are being missed. Overrides note merging.")
-	parser.add_argument('-notrim', action='store_false', help="Do not trim initial silence, which happens by default.")
-	parser.add_argument('-nosplit', action='store_false', help="Do not split different polynomial counter settings for channels as separate instrument tracks, which happens by default.")
-	parser.add_argument('-nomerge', action='store_false', help="Do not merge volume decays into a single MIDI note, which happens by default. Ignored if -all is used.")
-	parser.add_argument('-usevol', action='store_true', help="Use MIDI channel volume instead of note velocity. This is similar to how it happens in the actual chip.")
-	parser.add_argument('-useinst', action='store_true', help="Assign MIDI instruments to emulate the original POKEY sound.")
-	parser.add_argument('-boost', metavar='factor', nargs=1, type=float, help="Multiply note velocities by a factor. Useful if MIDI is too quiet. Use a large number (> 16) without -usevol to make all notes have the same max loudness.")
-	parser.add_argument('-bpm', nargs=1, type=float, help="Assume a given tempo in beats per minute (BPM), as precisely as you want. Default is %d. If the song's BPM is known precisely, this option makes the MIDI notes align with the beats, which makes using the MIDI in other places much easier. Doesn't work if the song has a dynamic tempo." % DEFAULT_TEMPO)
-	parser.add_argument('-timebase', nargs=1, type=int, help="Force a given MIDI timebase, the number of ticks in a beat (quarter note). Default is %d." % DEFAULT_TIMEBASE)
+	parser = argparse.ArgumentParser(description="POKEY2MIDI v%s by LucasVB/1ucasvb (http://1ucasvb.com). Converts textual POKEY dumps from (a slightly modified) asapscan into MIDI files." % VERSION)
+	parser.add_argument('--all', action='store_true', help="Use all notes by always retriggering. Useful for when notes are being missed. Overrides note merging.")
+	parser.add_argument('--notrim', action='store_false', help="Do not trim initial silence, which happens by default.")
+	parser.add_argument('--nosplit', action='store_false', help="Do not split different polynomial counter settings for channels as separate instrument tracks, which happens by default.")
+	parser.add_argument('--nomerge', action='store_false', help="Do not merge volume decays into a single MIDI note, which happens by default. Ignored if --all is used.")
+	parser.add_argument('--usevol', action='store_true', help="Use MIDI channel volume instead of note velocity. This is similar to how it happens in the actual chip.")
+	parser.add_argument('--useinst', action='store_true', help="Assign predefined MIDI instruments to emulate the original POKEY sound. Also use --setinst if you wish to define different instruments yourself.")
+	parser.add_argument('--setinst', metavar='n,n,n,n,n,n,n,n', nargs=1, type=str, help="Specify which General MIDI instruments to assign to each of the 8 poly settings. No spaces, n from 0 to 127. The last three are the most important for melody and default to: square wave=80, brass+lead=87, square wave=80.")
+	parser.add_argument('--boost', metavar='factor', nargs=1, type=float, help="Multiply note velocities by a factor. Useful if MIDI is too quiet. Use a large number (> 16) to make all notes have the same max loudness (useful for killing off POKEY effects that don't translate well to MIDI).")
+	parser.add_argument('--bpm', nargs=1, type=float, help="Assume a given tempo in beats per minute (BPM), as precisely as you want. Default is %d. If the song's BPM is known precisely, this option makes the MIDI notes align with the beats, which makes using the MIDI in other places much easier. Doesn't work if the song has a dynamic tempo." % DEFAULT_TEMPO)
+	parser.add_argument('--timebase', nargs=1, type=int, help="Force a given MIDI timebase, the number of ticks in a beat (quarter note). Default is %d." % DEFAULT_TIMEBASE)
 	parser.add_argument('input', metavar='input_file', type=str, nargs=1, help="Input POKEY dump text file.")
 	parser.add_argument('output', metavar='output_file', type=str, nargs="?", help="MIDI output file. If not specified, will output to the same path, with a '.mid' extension")
 	args = parser.parse_args()
@@ -852,6 +864,10 @@ if __name__ == "__main__":
 		converter.ForceTempo = args.bpm[0]
 	if args.timebase is not None:
 		converter.ForceTimebase = args.timebase[0]
+	if args.useinst and args.setinst is not None:
+		insts = [min(127,max(0,int(i) if len(i) else 0)) for i in args.setinst[0].split(',')]
+		insts += [0]*(8-len(insts))
+		converter.CustomInstruments = insts
 	
 	input = args.input[0]
 	
