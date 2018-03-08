@@ -595,7 +595,7 @@ class Converter(object):
 		# TODO: Fix potential issue with multiple tracks on same channel
 		self.UseChannelVolume = False
 		# Assign MIDI instruments to MIDI channels to emulate the original POKEY sound
-		self.UseInstruments = True
+		self.UseInstruments = False
 	
 	# Get a string tag for a given voice
 	# A voice exist for each instrument for each channel for each POKEY
