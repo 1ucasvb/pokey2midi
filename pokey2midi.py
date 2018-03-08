@@ -33,6 +33,7 @@ import os
 import math
 import struct
 import argparse
+import mimetypes
 
 # Constants
 VERSION				= "0.63"
@@ -624,6 +625,11 @@ class Converter(object):
 		
 		# Read raw POKEY data into song
 		print("Opening \"%s\"" % self.file)
+		
+		if mimetypes.guess_type(self.file)[0] != "text/plain":
+			print("ERROR\nIncorrect input format.")
+			exit()
+		
 		with open(self.file) as fin:
 			print("Reading POKEY data... ", end="")
 			for l in fin:
@@ -640,6 +646,9 @@ class Converter(object):
 				else:
 					# Extract timestamp from the rest
 					tokens = l.split(" ")
+					if len(tokens) != 10:
+						print("\nERROR\nIncorrect input format.")
+						exit()
 					t, data = float(tokens[0]), (" ".join(tokens[1:])).split("|")
 				
 				if not setup: # Setup metadata if we just parsed the first line
