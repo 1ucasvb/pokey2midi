@@ -28,7 +28,7 @@ Change that `"%6.2f: "` in the first `printf` to `"%6.6f "`, which will now outp
 
     printf("%6.6f ", (double) frame * CYCLES_PER_FRAME / MAIN_CLOCK);
 
-**Don't forget to remove of the colon!** I decided to use it as a way to distinguish the modified dumps.
+**Don't forget to remove the colon!** I decided to use it as a way to distinguish the modified dumps.
 
 Compile this and you're good to go!
 
