@@ -6,7 +6,7 @@ POKEY register dumps can be created from Atari SAP files by using `asapscan`, av
 ---
 # Instructions  
 
-However, the program is a bit useless as it is, and you'll have to recompile it with a small modification, as described below.
+However, `asapscan` is a bit useless as it is, and you'll have to recompile it with a small modification, as described below.
 
 Note: the compilation of ASAP requires Cito (http://cito.sourceforge.net)
 
