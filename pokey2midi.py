@@ -259,6 +259,8 @@ class POKEY(object):
 		# But that's not really useful, is it?
 		
 		# The periods of the 8 polys, given by the specifications (slightly modified)
+		# TODO: Use emulator and figure out the exact frequencies obtained
+		# It may be that the lowest bit being set adds a factor of 2 everytime, with T_PURE = 1
 		periods = [
 			T_POLY17 * T_POLY5,    # 0=0b000	17 Bit poly + 5 Bit poly = White noise
 			T_POLY5,               # 1=0b001	5 Bit poly = Low tone
