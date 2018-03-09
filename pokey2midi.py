@@ -936,24 +936,31 @@ class Converter(object):
 		
 		# If there ARE guesses, let's work on them
 		if len(guesses) > 0:
-			suggestions = [] # list of reasonable suggestions
-			fracs = [1,1/2,1/4,1/8,2,4,8,3/4,1/3,2/3,3,6,5/4,4/3]
+			suggestions = {} # list of reasonable suggestions
+			fracs = [1,1/2,1/4,1/8,2,4,8,3/4,1/3,2/3,3,6,5/4,4/3] # list of reasonable fractions
+			# We'll find all reasonable fractions of the potentially reasonable bpms found earlier
 			for guess in guesses:
 				for f in fracs:
-					bpm = guess*f
-					if bpm > 30 and bpm < 200:
-						suggestions.append(bpm)
+					bpm = guess*f # suggested guess
+					if bpm > 20 and bpm < 200: # is it "reasonable"? 
+						qbpm = round(bpm*100)/100 # quantize it to 2 decimal places
+						if qbpm not in suggestions:
+							suggestions[qbpm] = []
+						suggestions[qbpm].append(bpm) # bundle all that match up to two decimals
 			
 			# If there are reasonable suggestions
 			if len(suggestions) > 0:
+				# Take the arithmetic mean of all similar guesses
+				suggestions = [sum(suggestions[s])/len(suggestions[s]) for s in suggestions]
 				# We display them
 				# The high precision is necessary, as the higher the precision the less the notes
 				# will drift from the bars as time passes
 				print("Possible tempos (in bpm):")
 				for c, s in enumerate(sorted(set(suggestions))):
 					print("    %14.10f" % s, end="")
-					if c % 4 == 3:
+					if c % 4 == 3 or c == len(suggestions)-1:
 						print("")
+				print("Note: using high precision tempos avoids notes drifting out of alignment.")
 				return
 		
 		print("Couldn't guess any tempo. Sorry!")
@@ -971,7 +978,7 @@ if __name__ == "__main__":
 	parser.add_argument('--boost', metavar='factor', nargs=1, type=float, help="Multiply note velocities by a factor. Useful if MIDI is too quiet. Use a large number (> 16) to make all notes have the same max loudness (useful for killing off POKEY effects that don't translate well to MIDI).")
 	parser.add_argument('--maxtime', metavar='time', nargs=1, type=float, help="By default, asapscan dumps 15 minutes (!) of .POKEY data. Use this to ignore stuff after some point.")
 	parser.add_argument('--bpm', nargs=1, type=float, help="Assume a given tempo in beats per minute (bpm), as precisely as you want. Default is %d. If the song's bpm is known precisely, this option makes the MIDI notes align with the beats, which makes using the MIDI in other places much easier. Doesn't work if the song has a dynamic tempo." % DEFAULT_TEMPO)
-	parser.add_argument('--findbpm', action='store_true', help="Attempts to post-process the data to automatically detect tempo/bpm by using a simple algorithm. The best guesses are merely displayed after the conversion. Run again with one of these guesses as a parameter with --bpm to see if events aligned properly. Cannot be used with --all, but works better with --usevol.")
+	parser.add_argument('--findbpm', action='store_true', help="Attempts to post-process the data to automatically detect tempo/bpm by using a simple algorithm. The best guesses are merely displayed after the conversion. Run again with one of these guesses as a parameter with --bpm to see if events aligned properly. Cannot be used with --all, but might work better with --usevol.")
 	parser.add_argument('--timebase', nargs=1, type=int, help="Force a given MIDI timebase, the number of ticks in a beat (quarter note). Default is %d." % DEFAULT_TIMEBASE)
 	parser.add_argument('input', metavar='input_file', type=str, nargs=1, help="Input POKEY dump text file.")
 	parser.add_argument('output', metavar='output_file', type=str, nargs="?", help="MIDI output file. If not specified, will output to the same path, with a '.mid' extension")

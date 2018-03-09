@@ -11,15 +11,15 @@ As such, I needed a tool that was accurate, and which also separated potential i
 POKEY2MIDI has many options you can toggle on or off to customize the output. These include:
 
 * Can merge decaying notes as a single MIDI note.
-* Maps POKEY channel volume either to note velocity (loudness of each note) or MIDI channel volume
+* Maps POKEY channel volume either to note velocity (loudness of each note) or MIDI channel volume.
 * Splits notes per channel of each POKEY, or even per poly per channel per POKEY.
 * Trims initial silence so notes are aligned to MIDI bars.
 * Map MIDI instruments to each poly setting, or just leave it unmapped.
 * No pitch bend, because pitch bends suck!
-* Boost loudness of audio.
-* Save MIDIs with a specific length.
-* Includes an simple (but usually effective) algorithm to detect the tempo (in beats per minute) of songs.
-* Use a known song tempo to align MIDI events to the bars, making the transcription more useful to use elsewhere.
+* Boost loudness of notes.
+* Save MIDIs with a specific max duration.
+* Use a known song tempo to precisely align MIDI events to the bars, making the transcription more useful to use elsewhere. Doesn't affect playback perceptual speed.
+* Also includes a simple (but usually effective) algorithm to detect the precise tempo of songs. Many possibilities are suggested, and one of them is usually right. It's often easy to tell which one, especially if used in conjunction with a [a tap-based bpm detector](https://www.google.com/search?hl=en&q=bpm+tap+online).
 
 Noise and special effects (highpass filters) are not yet handled, but will be included at some point. The idea is to map noises into percussion maps.
 
