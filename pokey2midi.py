@@ -1,5 +1,5 @@
 '''
-	POKEY2MIDI v0.75
+	POKEY2MIDI v0.80
 	by LucasVB (http://1ucasvb.com/)
 	
 	Description:
@@ -37,14 +37,17 @@ import mimetypes
 import bz2
 
 # Constants
-VERSION				= "0.75"
+VERSION				= "0.80"
 NTSC				= 0
 PAL					= 1
 NOTES				= ['A','A#','B','C','C#','D','D#','E','F','F#','G','G#']
-ENABLE_16BIT		= True
 DEFAULT_TIMEBASE 	= 480
 DEFAULT_TEMPO 		= 60
-DEBUG				= False
+BPM_PRECISION		= 1e6 # Precision for the tempo detector during quantizing, higher is better
+BPM_THRESHOLD		= 20 # Minimum number of intervals to run tempo detector
+
+ENABLE_16BIT		= True # Internal debug
+DEBUG				= False # Internal debug
 
 # TODO: find the rest
 # 0 = white noise, cymbal?
@@ -437,7 +440,7 @@ class MIDI(object):
 		self.addEvent( track, time, [
 			'Ctrl', channel, ctrl, value
 		])
-		
+	
 	# Add a Program (Instrument) Change event
 	def progChange(self, track, time, channel, inst):
 		time -= self.timeOffset
@@ -612,6 +615,9 @@ class Converter(object):
 		self.TrimSilence = True
 		# Force a specific tempo
 		self.ForceTempo = None
+		# Attempt to detect song tempo with a simple algorithm
+		# Display the results aftewards
+		self.DetectTempo = False
 		# Force a specific timebase
 		self.ForceTimebase = None
 		# Don't use note velocities for note loudness. Use the channel volume instead.
@@ -636,9 +642,11 @@ class Converter(object):
 	def convert(self, file, output):
 		
 		if not os.path.isfile(file):
-			print("File \"%s\" doesn't exist" % self.file)
+			print("File \"%s\" doesn't exist" % file)
 			return
 		self.file = file
+		
+		print("="*20 + "[ POKEY2MIDI v%s ]"%VERSION + "="*20)
 		
 		setup = False # If the basic information is setup or not, set to True after first line read
 		song = Song(self) # The song object which will handle things
@@ -742,6 +750,10 @@ class Converter(object):
 		
 		# Current active notes for each channel
 		active_note = [ [None]*4 for pn in range(song.numPOKEY) ]
+		
+		# If we're detecting tempo, initialize beat counter
+		if self.DetectTempo:
+			beats = dict()
 		
 		# We begin assembling the MIDI data
 		print("Assembling MIDI file...")
@@ -848,8 +860,15 @@ class Converter(object):
 								midi_track, t, midi_ch,
 								inst
 							)
-							
-							
+						
+						# If we are detecting tempo, we add the note-on times to per-voice beat
+						# tracker, as long as the note is a low note (lower than Middle C)
+						if self.DetectTempo and midi_note < 60: # 60 is Middle C
+							if voice not in beats:
+								beats[voice] = list()
+							qt = round(t*BPM_PRECISION) # qt = quantized time
+							beats[voice].append(qt)
+						
 						# Add Note On event
 						midi.noteOn(midi_track, t, midi_ch, midi_note, midi_vol) 
 						active_note[pn][ch] = {
@@ -879,6 +898,65 @@ class Converter(object):
 		print("Saving MIDI file at \"%s\"" % output)
 		midi.save(output)
 		
+		if self.DetectTempo:
+			converter.detectTempo(beats)
+	
+	# Tempo/bpm detection function
+	# This is a VERY rudimentary algorithm, but it should work well enough for well-behaved songs
+	def detectTempo(self, beats):
+		print("Attempting to detect song tempo...")
+		
+		# We keep track of our best guesses on set
+		guesses = set()
+		
+		for v in beats: # For each voice
+			d = [] # we initialize a list of quantized time deltas (differences)
+			
+			# We populate the list with the spacings between consecutive notes on each voice
+			for i in range(1,len(beats[v])):
+				d.append(beats[v][i] - beats[v][i-1])
+			
+			# If the list is too short, we skip this voice
+			if len(d) < BPM_THRESHOLD:
+				continue
+			
+			d = list(sorted(d)) # We sort the found deltas
+			
+			# We'll find the central tendency by finding the median of these values
+			# No need to average in the case of an even number of entries, we're not that precise
+			d = d[len(d)//2]
+			
+			# We compute the bpm from the median interval between two notes for this voice
+			bpm = 60 / (d / BPM_PRECISION)
+			
+			# If the bpm is potentially reasonable, we'll add it to our guesses
+			if bpm >= 5 and bpm <= 650:
+				guesses.add(bpm)
+		
+		
+		# If there ARE guesses, let's work on them
+		if len(guesses) > 0:
+			suggestions = [] # list of reasonable suggestions
+			fracs = [1,1/2,1/4,1/8,2,4,8,3/4,1/3,2/3,3,6,5/4,4/3]
+			for guess in guesses:
+				for f in fracs:
+					bpm = guess*f
+					if bpm > 30 and bpm < 200:
+						suggestions.append(bpm)
+			
+			# If there are reasonable suggestions
+			if len(suggestions) > 0:
+				# We display them
+				# The high precision is necessary, as the higher the precision the less the notes
+				# will drift from the bars as time passes
+				print("Possible tempos (in bpm):")
+				for c, s in enumerate(sorted(set(suggestions))):
+					print("    %14.10f" % s, end="")
+					if c % 4 == 3:
+						print("")
+				return
+		
+		print("Couldn't guess any tempo. Sorry!")
 
 # If running by itself, handle command line options
 if __name__ == "__main__":
@@ -892,7 +970,8 @@ if __name__ == "__main__":
 	parser.add_argument('--setinst', metavar='n,n,n,n,n,n,n,n', nargs=1, type=str, help="Specify which General MIDI instruments to assign to each of the 8 poly settings. No spaces, n from 0 to 127. The last three are the most important for melody and default to: square wave=80, brass+lead=87, square wave=80.")
 	parser.add_argument('--boost', metavar='factor', nargs=1, type=float, help="Multiply note velocities by a factor. Useful if MIDI is too quiet. Use a large number (> 16) to make all notes have the same max loudness (useful for killing off POKEY effects that don't translate well to MIDI).")
 	parser.add_argument('--maxtime', metavar='time', nargs=1, type=float, help="By default, asapscan dumps 15 minutes (!) of .POKEY data. Use this to ignore stuff after some point.")
-	parser.add_argument('--bpm', nargs=1, type=float, help="Assume a given tempo in beats per minute (BPM), as precisely as you want. Default is %d. If the song's BPM is known precisely, this option makes the MIDI notes align with the beats, which makes using the MIDI in other places much easier. Doesn't work if the song has a dynamic tempo." % DEFAULT_TEMPO)
+	parser.add_argument('--bpm', nargs=1, type=float, help="Assume a given tempo in beats per minute (bpm), as precisely as you want. Default is %d. If the song's bpm is known precisely, this option makes the MIDI notes align with the beats, which makes using the MIDI in other places much easier. Doesn't work if the song has a dynamic tempo." % DEFAULT_TEMPO)
+	parser.add_argument('--findbpm', action='store_true', help="Attempts to post-process the data to automatically detect tempo/bpm by using a simple algorithm. The best guesses are merely displayed after the conversion. Run again with one of these guesses as a parameter with --bpm to see if events aligned properly. Cannot be used with --all, but works better with --usevol.")
 	parser.add_argument('--timebase', nargs=1, type=int, help="Force a given MIDI timebase, the number of ticks in a beat (quarter note). Default is %d." % DEFAULT_TIMEBASE)
 	parser.add_argument('input', metavar='input_file', type=str, nargs=1, help="Input POKEY dump text file.")
 	parser.add_argument('output', metavar='output_file', type=str, nargs="?", help="MIDI output file. If not specified, will output to the same path, with a '.mid' extension")
@@ -906,6 +985,7 @@ if __name__ == "__main__":
 	converter.SplitPolyAsTracks = args.nosplit
 	converter.UseChannelVolume = args.usevol
 	converter.UseInstruments = args.useinst
+	converter.DetectTempo = args.findbpm
 	if args.boost is not None:
 		converter.BoostVelocity = args.boost[0]
 	if args.maxtime is not None:
@@ -925,6 +1005,10 @@ if __name__ == "__main__":
 		output = args.output
 	else:
 		output = os.path.splitext(os.path.realpath(input))[0] + ".mid"
+	
+	if converter.DetectTempo and converter.AlwaysRetrigger:
+		print("Warning: --findbpm detection is incompatible with --all. No tempo will be detected.")
+		converter.DetectTempo = False
 	
 	converter.convert(input, output)
 

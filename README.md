@@ -1,10 +1,32 @@
-# pokey2midi
+# POKEY2MIDI
 POKEY2MIDI is a tool (using Python 3) to convert POKEY register dumps from Atari SAP files into MIDI music files.
 
-POKEY register dumps can be created from Atari SAP files by using `asapscan`, available on the ASAP project (http://asap.sourceforge.net). 
+The main motivation for writing this program was for me to transcribe Atari SAP music as MIDI to be later imported in other music composition programs.
+
+As such, I needed a tool that was accurate, and which also separated potential instruments/voices and aligned MIDI notes to the musical bars.
 
 ---
-# Instructions  
+# Features
+
+POKEY2MIDI has many options you can toggle on or off to customize the output. These include:
+
+* Can merge decaying notes as a single MIDI note.
+* Maps POKEY channel volume either to note velocity (loudness of each note) or MIDI channel volume
+* Splits notes per channel of each POKEY, or even per poly per channel per POKEY.
+* Trims initial silence so notes are aligned to MIDI bars.
+* Map MIDI instruments to each poly setting, or just leave it unmapped.
+* No pitch bend, because pitch bends suck!
+* Boost loudness of audio.
+* Save MIDIs with a specific length.
+* Includes an simple (but usually effective) algorithm to detect the tempo (in beats per minute) of songs.
+* Use a known song tempo to align MIDI events to the bars, making the transcription more useful to use elsewhere.
+
+Noise and special effects (highpass filters) are not yet handled, but will be included at some point. The idea is to map noises into percussion maps.
+
+---
+# Instructions
+
+POKEY register dumps can be created from Atari SAP files by using `asapscan`, available on the ASAP project (http://asap.sourceforge.net).  
 
 However, `asapscan` is a bit useless as it is, and you'll have to recompile it with a small modification, as described below.
 
