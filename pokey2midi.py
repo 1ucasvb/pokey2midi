@@ -30,11 +30,12 @@
 '''
 
 import os
+import re
+import bz2
 import math
 import struct
 import argparse
 import mimetypes
-import bz2
 
 # Constants
 VERSION				= "0.80"
@@ -669,26 +670,21 @@ class Converter(object):
 			
 			print("Reading POKEY data... ", end="")
 			for l in fin:
-				l = l.replace('\n','').replace('\r','') # get rid of EOL characters
+				l = re.sub(r"[\n\r\:]", "", l.strip()) # get rid of EOL characters and colon
+				l = re.sub(r"\s+", " ", l) # get rid of extra spaces
 				
 				if l == "NO RESPONSE": # Stop at end of POKEY data, if any (for finite songs)
 					break
 				
-				if ":" in l: # default asapscan format detected
-					print("\nERROR")
-					print("POKEY2MIDI requires a slightly modified version of asapscan to work.")
-					print("Please, see instructions at: https://github.com/1ucasvb/pokey2midi")
+				# Extract timestamp from the rest
+				tokens = l.split(" ")
+				try:
+					if len(tokens) != 10 and len(tokens) != 20:
+						raise
+					t, data = float(tokens[0]), (" ".join(tokens[1:])).split("|")
+				except:
+					print("\nERROR\nIncorrect input format.")
 					exit()
-				else:
-					# Extract timestamp from the rest
-					tokens = l.split(" ")
-					try:
-						if len(tokens) != 10 and len(tokens) != 20:
-							raise
-						t, data = float(tokens[0]), (" ".join(tokens[1:])).split("|")
-					except:
-						print("\nERROR\nIncorrect input format.")
-						exit()
 				
 				# Stop after a given time limit
 				if self.TimeLimit is not None and t > self.TimeLimit:
@@ -704,7 +700,7 @@ class Converter(object):
 				for n in range(numPOKEY): # convert to raw data
 					data[n] = bytes.fromhex(data[n])
 				
-				# asapscan outputs one line per frame. In most cases, many lines are identical
+				# asapscan outputs one line per frame. In many cases, lines are identical
 				# Since duplicate lines are meaningless (only changes in POKEY state are useful
 				# for detecting musical content), we ignore duplicate lines.
 				
@@ -967,7 +963,7 @@ class Converter(object):
 
 # If running by itself, handle command line options
 if __name__ == "__main__":
-	parser = argparse.ArgumentParser(description="POKEY2MIDI v%s by LucasVB/1ucasvb (http://1ucasvb.com). Converts textual POKEY dumps from (a slightly modified) asapscan into MIDI files." % VERSION)
+	parser = argparse.ArgumentParser(description="POKEY2MIDI v%s by LucasVB/1ucasvb (http://1ucasvb.com). Converts textual POKEY dumps from asapscan into MIDI files." % VERSION)
 	parser.add_argument('--all', action='store_true', help="Use all notes by always retriggering. Useful for when notes are being missed. Overrides note merging.")
 	parser.add_argument('--notrim', action='store_false', help="Do not trim initial silence, which happens by default.")
 	parser.add_argument('--nosplit', action='store_false', help="Do not split different polynomial counter settings for channels as separate instrument tracks, which happens by default.")
@@ -976,7 +972,7 @@ if __name__ == "__main__":
 	parser.add_argument('--useinst', action='store_true', help="Assign predefined MIDI instruments to emulate the original POKEY sound. Also use --setinst if you wish to define different instruments yourself.")
 	parser.add_argument('--setinst', metavar='n,n,n,n,n,n,n,n', nargs=1, type=str, help="Specify which General MIDI instruments to assign to each of the 8 poly settings. No spaces, n from 0 to 127. The last three are the most important for melody and default to: square wave=80, brass+lead=87, square wave=80.")
 	parser.add_argument('--boost', metavar='factor', nargs=1, type=float, help="Multiply note velocities by a factor. Useful if MIDI is too quiet. Use a large number (> 16) to make all notes have the same max loudness (useful for killing off POKEY effects that don't translate well to MIDI).")
-	parser.add_argument('--maxtime', metavar='time', nargs=1, type=float, help="By default, asapscan dumps 15 minutes (!) of .POKEY data. Use this to ignore stuff after some point.")
+	parser.add_argument('--maxtime', metavar='time', nargs=1, type=float, help="By default, asapscan dumps 15 minutes (!) of POKEY data. Use this to ignore stuff after some point.")
 	parser.add_argument('--bpm', nargs=1, type=float, help="Assume a given tempo in beats per minute (bpm), as precisely as you want. Default is %d. If the song's bpm is known precisely, this option makes the MIDI notes align with the beats, which makes using the MIDI in other places much easier. Doesn't work if the song has a dynamic tempo." % DEFAULT_TEMPO)
 	parser.add_argument('--findbpm', action='store_true', help="Attempts to post-process the data to automatically detect tempo/bpm by using a simple algorithm. The best guesses are merely displayed after the conversion. Run again with one of these guesses as a parameter with --bpm to see if events aligned properly. Cannot be used with --all, but might work better with --usevol.")
 	parser.add_argument('--timebase', nargs=1, type=int, help="Force a given MIDI timebase, the number of ticks in a beat (quarter note). Default is %d." % DEFAULT_TIMEBASE)
