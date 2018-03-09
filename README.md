@@ -19,7 +19,7 @@ POKEY2MIDI has many options you can toggle on or off to customize the output. Th
 * Boost loudness of notes.
 * Save MIDIs with a specific max duration.
 * Use a known song tempo to precisely align MIDI events to the bars, making the transcription more useful to use elsewhere. Doesn't affect playback perceptual speed.
-* Also includes a simple (but usually effective) algorithm to detect the precise tempo of songs. Many possibilities are suggested, and one of them is usually right. It's often easy to tell which one, especially if used in conjunction with a [a tap-based bpm detector](https://www.google.com/search?hl=en&q=bpm+tap+online).
+* Also includes a simple (but usually effective) algorithm to detect the precise tempo of songs. Many possibilities are suggested, and one of them is usually right. It's often easy to tell which one, especially if used in conjunction with a [a tap-based bpm detector](https://www.google.com/search?hl=en&q=bpm+tap+online). However, this requires a modification of asapscan (see below).
 
 Noise and special effects (highpass filters) are not yet handled, but will be included at some point. The idea is to map noises into percussion maps.
 
@@ -36,6 +36,34 @@ Where `N` is the subsong number (starting from 0), if any. Otherwise, this setti
 
 Once the text file is ready, just run POKEY2MIDI on it as per instructions.
 
+---
+# Advanced stuff
+
+However, even though the normal `asapscan` will do fine, it is still limited as it is. You'll have to recompile it with a small modification to get more out of it. 
+
+Note: the compilation of ASAP requires Cito (http://cito.sourceforge.net)
+
+The original version of `asapscan` only outputs timestamps with 2 decimal digits of precision, which is insufficient for some purposes. For instance, finding exact song tempos (using `--findbpm`) to align notes properly (with `--bpm`) is impossible without more precision. The notes quickly drift out of alignment.
+
+The relevant lines to change are found in `asapscan.c`:
+
+    if (dump) {
+    	printf("%6.2f: ", (double) frame * CYCLES_PER_FRAME / MAIN_CLOCK);
+    	print_pokey(&asap->pokeys.basePokey);
+    	if (asap->moduleInfo.channels == 2) {
+    		printf("  |  ");
+    		print_pokey(&asap->pokeys.extraPokey);
+    	}
+    	printf("\n");
+    }
+
+Change that `"%6.2f: "` in the first `printf` to `"%6.6f "`, which will now output 6 digits after the decimal:
+
+    printf("%6.6f ", (double) frame * CYCLES_PER_FRAME / MAIN_CLOCK);
+
+(Might as well get rid of that pesky colon!)
+
+Compile this and you're good to go! Now you can use `--findbpm`. A pre-compiled version of this modified `asapscan` for Microsoft Windows is in the `bin` directory.
 
 ---
 # Samples
