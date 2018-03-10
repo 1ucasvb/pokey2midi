@@ -1,5 +1,5 @@
 '''
-	POKEY2MIDI v0.84
+	POKEY2MIDI v0.85
 	by LucasVB (http://1ucasvb.com/)
 	
 	Description:
@@ -38,7 +38,7 @@ import argparse
 import mimetypes
 
 # Constants
-VERSION				= "0.84"
+VERSION				= "0.85"
 NTSC				= 0
 PAL					= 1
 NOTES				= ['A','A#','B','C','C#','D','D#','E','F','F#','G','G#']
@@ -51,9 +51,9 @@ FPS_PAL				= 50
 # Settings
 DEFAULT_TIMEBASE 	= 480
 DEFAULT_TEMPO 		= 60
-# Precision for the tempo detector during quantizing, higher is better
-BPM_PRECISION		= 10/(DT_NTSC*DT_PAL)
-BPM_THRESHOLD		= 20 # Minimum number of intervals to run tempo detector
+BPM_COUNT_THRESHOLD	= 20 # Minimum number of intervals to run tempo detector
+BPM_NOTE_THRESHOLD	= 60 # 60 = Middle C
+FPB_LIMITS			= [10,100] # frames per beat (300 to 30 bpm)
 
 # Debug contants
 ENABLE_16BIT		= True # Enable 16bit?
@@ -904,12 +904,14 @@ class Converter(object):
 							)
 						
 						# If we are detecting tempo, we add the note-on times to per-voice beat
-						# tracker, as long as the note is a low note (lower than Middle C)
-						if self.DetectTempo and midi_note < 60: # 60 is Middle C
+						# tracker, as long as the note is below a threshold (lower notes are
+						# more likely to be related to beats), and if it's a tonal note
+						if self.DetectTempo and \
+							state['poly'][ch] in [5,6,7] and \
+							midi_note < BPM_NOTE_THRESHOLD:
 							if voice not in beats:
 								beats[voice] = list()
-							qt = round(t*BPM_PRECISION) # qt = quantized time
-							beats[voice].append(qt)
+							beats[voice].append(round(t / dt)) # append frame to beat
 						
 						# Add Note On event
 						midi.noteOn(midi_track, t, midi_ch, midi_note, midi_vol) 
@@ -946,8 +948,6 @@ class Converter(object):
 	# Tempo/bpm detection function
 	# This is a VERY rudimentary algorithm, but it should work well enough for well-behaved songs
 	def detectTempo(self, beats, mode):
-		print("Attempting to detect song tempo...")
-		
 		if mode == NTSC:
 			dt = DT_NTSC
 			fps = FPS_NTSC
@@ -955,33 +955,16 @@ class Converter(object):
 			dt = DT_PAL
 			fps = FPS_PAL
 		
-		# We keep track of our best guesses on set
+		# For each voice
 		guesses = set()
-		
-		for v in beats: # For each voice
-			d = [] # we initialize a list of quantized time deltas (differences)
+		for v in beats:
+			b = []
+			for i in range(1, len(beats[v])):
+				b.append( beats[v][i] - beats[v][i-1] ) # add to a list of time differences
 			
-			# We populate the list with the spacings between consecutive notes on each voice
-			for i in range(1,len(beats[v])):
-				d.append(beats[v][i] - beats[v][i-1])
-			
-			# If the list is too short, we skip this voice
-			if len(d) < BPM_THRESHOLD:
-				continue
-			
-			d = list(sorted(d)) # We sort the found deltas
-			
-			# We'll find the central tendency by finding the median of these values
-			# No need to average in the case of an even number of entries, we're not that precise
-			d = d[len(d)//2]
-			
-			# We compute the bpm from the median interval between two notes for this voice
-			bpm = 60 / (d / BPM_PRECISION)
-			
-			# If the bpm is potentially reasonable, we'll add it to our guesses
-			if bpm >= 5 and bpm <= 650:
-				guesses.add(bpm)
-		
+			if len(b) > BPM_COUNT_THRESHOLD:
+				b = sorted(b)
+				guesses.add(b[ len(b) // 2 ]) # add median difference as a possible fpb
 		
 		# If there ARE guesses, let's work on them
 		if len(guesses) > 0:
@@ -990,17 +973,16 @@ class Converter(object):
 			# We'll find all reasonable fractions of the potentially reasonable bpms found earlier
 			for guess in guesses:
 				for f in fracs:
-					bpm = guess*f # suggested guess
-					if bpm > 20 and bpm < 200: # is it "reasonable"? 
-						qbpm = round(60 / (bpm * dt)) # quantize it to frames/beat
-						suggestions.add(qbpm)
+					fpb = guess*f # suggested guess
+					if fpb >= FPB_LIMITS[0] and fpb <= FPB_LIMITS[1]: # is it "reasonable"? 
+						suggestions.add(round(fpb))
 			
 			# If there are reasonable suggestions
 			if len(suggestions) > 0:
 				# We display them
 				print("Possible tempos (in bpm):")
 				for c, s in enumerate(reversed(sorted(suggestions))):
-					bpm = 60 / (dt * s)
+					bpm = 60 / (dt * s) # frames per beat to beats per minute
 					print("    %16.12f" % bpm, end="")
 					if c % 4 == 3 or c == len(suggestions)-1:
 						print("")
@@ -1008,6 +990,7 @@ class Converter(object):
 				return
 		
 		print("Couldn't guess any tempo. Sorry!")
+
 
 # If running by itself, handle command line options
 if __name__ == "__main__":
@@ -1025,11 +1008,15 @@ if __name__ == "__main__":
 	parser.add_argument('--bpm', nargs=1, type=float, help="Assume a given tempo in beats per minute (bpm), as precisely as you want. Default is %d. If the song's bpm is known precisely, this option makes the MIDI notes align with the beats, which makes using the MIDI in other places much easier. Doesn't work if the song has a dynamic tempo." % DEFAULT_TEMPO)
 	parser.add_argument('--findbpm', action='store_true', help="Attempts to post-process the data to automatically detect tempo/bpm by using a simple algorithm. The best guesses are merely displayed after the conversion. Run again with one of these guesses as a parameter with --bpm to see if events aligned properly. Cannot be used with --all, but might work better with --usevol.")
 	parser.add_argument('--timebase', nargs=1, type=int, help="Force a given MIDI timebase, the number of ticks in a beat (quarter note). Default is %d." % DEFAULT_TIMEBASE)
+	parser.add_argument('--debug', action='store_true', help=argparse.SUPPRESS)
 	parser.add_argument('input', metavar='input_file', type=str, nargs=1, help="Input POKEY dump text file.")
 	parser.add_argument('output', metavar='output_file', type=str, nargs="?", help="MIDI output file. If not specified, will output to the same path, with a '.mid' extension")
 	args = parser.parse_args()
 	
 	converter = Converter()
+	
+	if args.debug:
+		DEBUG_POLYS = True
 	
 	converter.AlwaysRetrigger = args.all
 	converter.MergeDecays = args.nomerge
