@@ -1,5 +1,5 @@
 '''
-	POKEY2MIDI v0.80
+	POKEY2MIDI v0.84
 	by LucasVB (http://1ucasvb.com/)
 	
 	Description:
@@ -38,17 +38,27 @@ import argparse
 import mimetypes
 
 # Constants
-VERSION				= "0.80"
+VERSION				= "0.84"
 NTSC				= 0
 PAL					= 1
 NOTES				= ['A','A#','B','C','C#','D','D#','E','F','F#','G','G#']
+DT_NTSC				= 262 * 114 / 1789772.5 # time between NTSC frames
+DT_PAL				= 312 * 114 / 1773447.0 # time between PAL frames
+NTSC_TAG			= "%.02f" % (2*DT_NTSC) # "0.03"
+FPS_NTSC			= 59.94
+FPS_PAL				= 50
+
+# Settings
 DEFAULT_TIMEBASE 	= 480
 DEFAULT_TEMPO 		= 60
-BPM_PRECISION		= 1e6 # Precision for the tempo detector during quantizing, higher is better
+# Precision for the tempo detector during quantizing, higher is better
+BPM_PRECISION		= 10/(DT_NTSC*DT_PAL)
 BPM_THRESHOLD		= 20 # Minimum number of intervals to run tempo detector
 
-ENABLE_16BIT		= True # Internal debug
+# Debug contants
+ENABLE_16BIT		= True # Enable 16bit?
 DEBUG				= False # Internal debug
+DEBUG_POLYS			= False # Also write non-tonal polys (0-4) notes as given by AUDF
 
 # TODO: find the rest
 # 0 = white noise, cymbal?
@@ -59,11 +69,8 @@ POLY_INSTRUMENT		= [0,87,0,87,0,80,87,80]
 
 # Human-readable POKEY state and other goodies
 class POKEY(object):
-	def __init__(self, number, mode=None):
-		if mode is None:
-			self.mode = NTSC
-		else:
-			self.mode = mode
+	def __init__(self, number, mode):
+		self.mode = mode
 		# Per-channel data
 		self.audf			= [0,0,0,0] # channel frequency data
 		self.vol			= [0,0,0,0] # channel volumes
@@ -85,8 +92,8 @@ class POKEY(object):
 		
 	# The availalbe clock frquencies in Hz
 	@property
-	def CLOCK_MHz(self): # Exact values
-		return 1789789 if self.mode == NTSC else 1773447
+	def CLOCK_MHz(self):
+		return 1789772.5 if self.mode == NTSC else 1773447.0
 	
 	@property
 	def CLOCK_64kHz(self): # TODO: verify these PAL values
@@ -189,9 +196,14 @@ class POKEY(object):
 		if self.volctrl[ch-1]: # DC mode means no note available, has to be transcribed by hand!
 			return 0
 		
+		# Debug currently unhandled poly settings
+		# Emulate frequencies so that the MIDI note number is the AUDF value for the channel
+		if DEBUG_POLYS and self.poly[ch-1] not in [5,6,7]:
+			return 27.5 * math.pow(2,(self.audf[ch-1] - 21)/12)
+		
 		# TODO: For now only, we'll only handle possibly tonal sounds.
 		# The noisier ones will have to be handled in a better way.
-		if self.poly[ch-1] in [1,4]:
+		if self.poly[ch-1] not in [5,6,7]:
 			return 0
 		
 		
@@ -540,9 +552,8 @@ class Song(object):
 		return len(self.pokeys)
 	
 	# Initializes POKEYs
-	def initPOKEY(self, n):
-		self.pokeys = [POKEY(pn) for pn in range(n)]
-		print( "%d POKEY found" % n )
+	def initPOKEY(self, n, mode):
+		self.pokeys = [POKEY(pn, mode) for pn in range(n)]
 	
 	# Add a new POKEY state
 	def addState(self, t, data):
@@ -612,6 +623,8 @@ class Converter(object):
 		self.TimeLimit = None
 		# Split different polynomial counter settings for channels as separate instrument tracks
 		self.SplitPolyAsTracks = True
+		# Use short track names
+		self.ShortTrackNames = False
 		# Trim initial silence (first note plays immediately)
 		self.TrimSilence = True
 		# Force a specific tempo
@@ -647,32 +660,43 @@ class Converter(object):
 			return
 		self.file = file
 		
-		print("="*20 + "[ POKEY2MIDI v%s ]"%VERSION + "="*20)
 		
-		setup = False # If the basic information is setup or not, set to True after first line read
 		song = Song(self) # The song object which will handle things
 		
-		# Read raw POKEY data into song
+		print("="*20 + "[ POKEY2MIDI v%s ]"%VERSION + "="*20)
 		print("Opening \"%s\"" % self.file)
 		
+		# Detect MIME type
 		mime = mimetypes.guess_type(self.file)
-		
 		if mime[0] != "text/plain" or mime[1] is not None and mime[1] != "bzip2":
 			print("ERROR\nIncorrect input format.")
 			exit()
-		
 		if mime[1] == "bzip2":
 			handle = bz2.open(self.file, "rt")
 		elif mime[1] == None:
 			handle = open(self.file, "rt")
 		
 		with handle as fin:
+			print("Reading POKEY data...")
 			
-			print("Reading POKEY data... ", end="")
+			# Detect NTSC or PAL, skip to 3rd line where we can tell them apart
+			for ln in range(3):
+				l = fin.readline()
+			
+			if l[0][:-1] == NTSC_TAG:
+				mode = NTSC
+				dt = DT_NTSC # the correct time between frames for NTSC
+			else:
+				mode = PAL
+				dt = DT_PAL # the correct time between frames for PAL
+			
+			# Reset reading pointer
+			fin.seek(0)
+			
+			ln = 0 # line number
 			for l in fin:
 				l = re.sub(r"[\n\r\:]", "", l.strip()) # get rid of EOL characters and colon
 				l = re.sub(r"\s+", " ", l) # get rid of extra spaces
-				
 				if l == "NO RESPONSE": # Stop at end of POKEY data, if any (for finite songs)
 					break
 				
@@ -681,24 +705,32 @@ class Converter(object):
 				try:
 					if len(tokens) != 10 and len(tokens) != 20:
 						raise
-					t, data = float(tokens[0]), (" ".join(tokens[1:])).split("|")
+					data = (" ".join(tokens[1:])).split("|")
 				except:
-					print("\nERROR\nIncorrect input format.")
+					print("ERROR\nIncorrect input format.")
 					exit()
+				
+				if ln == 0: # Setup metadata if we just parsed the first line
+					numPOKEY = len(data)
+					# Assume zeroed out registers initially
+					last_data = [bytes.fromhex("00"*9)] * numPOKEY
+					print(
+						("Mode: Mono" if numPOKEY == 1 else "Stereo") + ", " + \
+						("NTSC (%.2f Hz)"%FPS_NTSC if mode == NTSC else "PAL (%.2f Hz)" % FPS_PAL)
+					)
+				
+				# Compute timestamp by ourselves, for more precision
+				t = ln*dt
 				
 				# Stop after a given time limit
 				if self.TimeLimit is not None and t > self.TimeLimit:
 					break
 				
-				if not setup: # Setup metadata if we just parsed the first line
-					numPOKEY = len(data)
-					# Assume zeroed out registers initially
-					last_data = [bytes.fromhex("00"*9)] * numPOKEY
-					setup = True
-				
 				# AUDF1 AUDC1 AUDF2 AUDC2 AUDF3 AUDC3 AUDF4 AUDC4 AUDCTL
 				for n in range(numPOKEY): # convert to raw data
 					data[n] = bytes.fromhex(data[n])
+				
+				ln += 1 # increase line number
 				
 				# asapscan outputs one line per frame. In many cases, lines are identical
 				# Since duplicate lines are meaningless (only changes in POKEY state are useful
@@ -714,7 +746,7 @@ class Converter(object):
 				song.addState( t, data )
 		
 		# Initialize POKEYs
-		song.initPOKEY(numPOKEY)
+		song.initPOKEY(numPOKEY, mode)
 		
 		# Compile song data into notes
 		song.compile()
@@ -739,11 +771,15 @@ class Converter(object):
 		for v in song.voices:
 			mt = midi.newTrack()
 			v = v.split(" ")
-			midi.setTrackName( mt, "POKEY %s, Channel %s" % (v[0], int(v[1])+1) )
-			# If each poly is in a separate track, we specify it on the instrument field
+			# If each poly is in a separate track or not, we specify it
 			if self.SplitPolyAsTracks:
+				fmt = "%s: Ch %s Poly %s" if self.ShortTrackNames else "POKEY %s Channel %s Poly %s"
+				midi.setTrackName( mt, fmt % (v[0], int(v[1])+1, v[2]) )
 				midi.setInstrumentName( mt, "Poly %s" % v[2] )
-		
+			else:
+				fmt = "%s: Ch %s" if self.ShortTrackNames else "POKEY %s Channel %s"
+				midi.setTrackName( mt, fmt % (v[0], int(v[1])+1) )
+			
 		# Current active notes for each channel
 		active_note = [ [None]*4 for pn in range(song.numPOKEY) ]
 		
@@ -843,6 +879,7 @@ class Converter(object):
 							)
 							active_note[pn][ch] = None # Mark as free to be used
 						else:
+							# Otherwise, update the note state
 							active_note[pn][ch] = {
 								'note': midi_note,
 								'vol': vol,
@@ -885,7 +922,7 @@ class Converter(object):
 		
 		# Once the track is done
 		# Kill all leftover notes after a small offset
-		offset = 1/50 # in seconds
+		offset = dt # in seconds
 		for pn in range(song.numPOKEY):
 			for ch in range(4):
 				voice = self.voice(pn, ch, state['poly'][ch])
@@ -904,12 +941,19 @@ class Converter(object):
 		midi.save(output)
 		
 		if self.DetectTempo:
-			converter.detectTempo(beats)
+			converter.detectTempo(beats, mode)
 	
 	# Tempo/bpm detection function
 	# This is a VERY rudimentary algorithm, but it should work well enough for well-behaved songs
-	def detectTempo(self, beats):
+	def detectTempo(self, beats, mode):
 		print("Attempting to detect song tempo...")
+		
+		if mode == NTSC:
+			dt = DT_NTSC
+			fps = FPS_NTSC
+		else:
+			dt = DT_PAL
+			fps = FPS_PAL
 		
 		# We keep track of our best guesses on set
 		guesses = set()
@@ -941,31 +985,26 @@ class Converter(object):
 		
 		# If there ARE guesses, let's work on them
 		if len(guesses) > 0:
-			suggestions = {} # list of reasonable suggestions
+			suggestions = set() # list of reasonable suggestions
 			fracs = [1,1/2,1/4,1/8,2,4,8,3/4,1/3,2/3,3,6,5/4,4/3] # list of reasonable fractions
 			# We'll find all reasonable fractions of the potentially reasonable bpms found earlier
 			for guess in guesses:
 				for f in fracs:
 					bpm = guess*f # suggested guess
 					if bpm > 20 and bpm < 200: # is it "reasonable"? 
-						qbpm = round(bpm*100)/100 # quantize it to 2 decimal places
-						if qbpm not in suggestions:
-							suggestions[qbpm] = []
-						suggestions[qbpm].append(bpm) # bundle all that match up to two decimals
+						qbpm = round(60 / (bpm * dt)) # quantize it to frames/beat
+						suggestions.add(qbpm)
 			
 			# If there are reasonable suggestions
 			if len(suggestions) > 0:
-				# Take the arithmetic mean of all similar guesses
-				suggestions = [sum(suggestions[s])/len(suggestions[s]) for s in suggestions]
 				# We display them
-				# The high precision is necessary, as the higher the precision the less the notes
-				# will drift from the bars as time passes
 				print("Possible tempos (in bpm):")
-				for c, s in enumerate(sorted(set(suggestions))):
-					print("    %14.10f" % s, end="")
+				for c, s in enumerate(reversed(sorted(suggestions))):
+					bpm = 60 / (dt * s)
+					print("    %16.12f" % bpm, end="")
 					if c % 4 == 3 or c == len(suggestions)-1:
 						print("")
-				print("Note: using high precision tempos avoids notes drifting out of alignment.")
+				print("Note: using high precision tempos with --bpm avoids notes drifting out of alignment.")
 				return
 		
 		print("Couldn't guess any tempo. Sorry!")
@@ -979,6 +1018,7 @@ if __name__ == "__main__":
 	parser.add_argument('--nomerge', action='store_false', help="Do not merge volume decays into a single MIDI note, which happens by default. Ignored if --all is used.")
 	parser.add_argument('--usevol', action='store_true', help="Use MIDI channel volume instead of note velocity. This is similar to how it happens in the actual chip.")
 	parser.add_argument('--useinst', action='store_true', help="Assign predefined MIDI instruments to emulate the original POKEY sound. Also use --setinst if you wish to define different instruments yourself.")
+	parser.add_argument('--short', action='store_true', help="Use shorter MIDI track names.")
 	parser.add_argument('--setinst', metavar='n,n,n,n,n,n,n,n', nargs=1, type=str, help="Specify which General MIDI instruments to assign to each of the 8 poly settings. No spaces, n from 0 to 127. The last three are the most important for melody and default to: square wave=80, brass+lead=87, square wave=80.")
 	parser.add_argument('--boost', metavar='factor', nargs=1, type=float, help="Multiply note velocities by a factor. Useful if MIDI is too quiet. Use a large number (> 16) to make all notes have the same max loudness (useful for killing off POKEY effects that don't translate well to MIDI).")
 	parser.add_argument('--maxtime', metavar='time', nargs=1, type=float, help="By default, asapscan dumps 15 minutes (!) of POKEY data. Use this to ignore stuff after some point.")
@@ -994,6 +1034,7 @@ if __name__ == "__main__":
 	converter.AlwaysRetrigger = args.all
 	converter.MergeDecays = args.nomerge
 	converter.TrimSilence = args.notrim
+	converter.ShortTrackNames = args.short
 	converter.SplitPolyAsTracks = args.nosplit
 	converter.UseChannelVolume = args.usevol
 	converter.UseInstruments = args.useinst

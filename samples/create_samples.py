@@ -7,7 +7,7 @@ import bz2
 saps = glob.glob(os.path.join("sap","*.sap"))
 
 # Path for asapscan executable
-asapscan_path = os.path.join("..","bin","asapscan-highprecision")
+asapscan_path = os.path.join("..","bin","asapscan")
 
 # Python 3 command/path
 python3 = "python"
