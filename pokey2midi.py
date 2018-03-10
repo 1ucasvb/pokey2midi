@@ -635,9 +635,9 @@ class Converter(object):
 	# voices themselves
 	def voice(self, pn, ch, poly):
 		if self.SplitPolyAsTracks:
-			return "%d %s %s" % (pn, ch, poly)
+			return "%d %s %s" % (pn, ch+1, poly)
 		else:
-			return "%d %s" % (pn, ch)
+			return "%d %s" % (pn, ch+1)
 	
 	# Main conversion function
 	def convert(self, file, output):
@@ -809,7 +809,7 @@ class Converter(object):
 								# Decaying sounds are usually used for decaying envelopes, so
 								# the natural decay of the MIDI note should work fine.
 								# Of course, only if we have set MergeDecays to True
-								if self.MergeDecays and active_note[pn][ch]['vol'] < vol: 
+								if self.MergeDecays and active_note[pn][ch]['vol'] < vol:
 									kill = True
 								# Note, however, that if a song uses a ramping up attack, this
 								# just results in many quick notes rising up in volume, which
@@ -825,6 +825,8 @@ class Converter(object):
 							# Disabled for now
 							# TODO: verify when this happens to know exactly how to handle it
 							# if active_note[pn][ch]['voice'] != voice:
+								# print("Voice changed", pn, ch)
+								# exit()
 								# kill = True
 							
 							# Always kill if current volume is zero
@@ -840,6 +842,13 @@ class Converter(object):
 								active_note[pn][ch]['note']
 							)
 							active_note[pn][ch] = None # Mark as free to be used
+						else:
+							active_note[pn][ch] = {
+								'note': midi_note,
+								'vol': vol,
+								'track': midi_track,
+								'voice': voice
+							}
 					
 					# If no active note, a new current note exists and volume is non-zero, we have
 					# a new note being played
