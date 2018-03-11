@@ -23,8 +23,30 @@ subsongs = {
 	"Global_War": [0],
 	"His_Dark_Majesty_Ingame": [3],
 	"Maxi_2": [0,1],
-	"Pion": [0,1],
+	"Piona": [0],
 	"Yoomp": [0]
+}
+
+# Found manually
+tempos = {
+	"ABBUC_20_1": [93.488898026316],
+	"Videopoly": [124.651864035088],
+	"An_Anthem_for_Winterchip": [124.651864035088],
+	"Bells": [124.651864035088],
+	"Crypts_of_Egypt_Ingame": [93.4888980263158],
+	"Draconus": [74.79111842105263],
+	"Global_War": [74.79111842105263],
+	"His_Dark_Majesty_Ingame": [None,None,None,106.84445488721805],
+	"M_U_L_E": [124.65186403508773],
+	"Maxi_2": [124.651864035088,124.651864035088],
+	"Misunderstanding": [93.4888980263158],
+	"Piona": [62.32593201754386],
+	"Posthelper": [124.651864035088],
+	"Saddams_Secret_Moonbase": [124.65186403508773],
+	"Sahara": [124.65186403508773],
+	"Typewriter": [124.651864035088],
+	"Short": [124.651864035088],
+	"Gamma": [124.651864035088]
 }
 
 print("Generating samples...")
@@ -51,8 +73,13 @@ for sap in saps:
 		
 		print("Converting subsong %d... " % s)
 		
+		opts = pokey2midi_options
+		if name in tempos and tempos[name][s] is not None:
+			opts += ['--bpm',str(tempos[name][s])]
+		
 		log = subprocess.run(
-			[python3, pokey2midi_path] + pokey2midi_options + [dump_path, midi_path],
+			[python3, pokey2midi_path] + opts
+			+ [dump_path, midi_path],
 			stdout=subprocess.PIPE
 		)
 		

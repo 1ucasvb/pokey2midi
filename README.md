@@ -19,7 +19,7 @@ POKEY2MIDI has many options you can toggle on or off to customize the output. Th
 * Boost loudness of notes.
 * Save MIDIs with a specific max duration.
 * Use a known song tempo to precisely align MIDI events to the bars, making the transcription more useful to use elsewhere. Doesn't affect playback/perceptual speed.
-* Also includes a simple (but usually effective) algorithm to detect the precise tempo of songs. Many possibilities are suggested, and one of them is usually right. It's often easy to tell which one, especially if used in conjunction with a [a tap-based bpm detector](https://www.google.com/search?hl=en&q=bpm+tap+online).
+* Also includes a simple (but usually effective) algorithm to detect the precise tempo of songs. Many possibilities are suggested, and one of them is usually right. It's often easy to tell which one, especially if used in conjunction with a [tap-based bpm detector](https://www.google.com/search?hl=en&q=bpm+tap+online).
 
 Noise and special effects (highpass filters) are not yet handled, but will be included at some point. The idea is to map noises into percussions.
 
