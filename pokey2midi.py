@@ -27,6 +27,10 @@
 			What about percussions?
 		
 		Option to ignore all volume information and merge notes maximally?
+		
+		Suppress duplicate channels?
+			If channels have the exact same content, kill duplicates
+			Helps with cleanup
 '''
 
 import os
@@ -65,7 +69,7 @@ DEBUG_POLYS			= False # Also write non-tonal polys (0-4) notes as given by AUDF
 # 2 = low buzz when high freq, helicopter for low freq?
 # 4 = pink noise, seashore?
 # Use negative values for percussion map? (MIDI channel 9)
-POLY_INSTRUMENT		= [0,87,0,87,0,80,87,80]
+POLY_INSTRUMENT		= [0,0,0,0,0,80,81,80]
 
 # Human-readable POKEY state and other goodies
 class POKEY(object):
