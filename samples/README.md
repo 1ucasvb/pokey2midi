@@ -5,4 +5,4 @@ The small Python script `create_samples.py` automatically:
 
 POKEY2MIDI is ran with the following settings: `--useinst`, `--usevol` (to best simulate the original POKEY sounds) and `--maxtime 300` so we don't create 15 minute-long MIDIs.
 
-asapscan is available from the ASAP Project: http://asap.sourceforge.net
+asapscan is available from the ASAP Project: http://asap.sourceforge.net. (You might have to compile it from the binaries yourself, though.)
