@@ -34,7 +34,9 @@ Just run `asapscan` with the `-d` command, and save the contents into a text fil
 
 Where `N` is the subsong number (starting from 0), if any. Otherwise, this setting can be omitted. The above should work on both Windows and Linux.
 
-Once the text file is ready, just run POKEY2MIDI on it as per instructions. POKEY2MIDI also accepts bzip2-compressed text files, but that's not necessary. I just added that support so the repository wouldn't be large because of huge text dumps. :P
+Once the text file is ready, just run POKEY2MIDI on it as per instructions (see "Command line parameters" below).
+
+POKEY2MIDI also accepts bzip2-compressed text files, but that's not necessary. I just added that support so the repository wouldn't be large because of huge text dumps. :P
 
 ---
 # Command line parameters
