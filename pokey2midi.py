@@ -1,5 +1,5 @@
 '''
-	POKEY2MIDI v0.85
+	POKEY2MIDI v0.86
 	by LucasVB (http://1ucasvb.com/)
 	
 	Description:
@@ -48,7 +48,6 @@ PAL					= 1
 NOTES				= ['A','A#','B','C','C#','D','D#','E','F','F#','G','G#']
 DT_NTSC				= 262 * 114 / 1789772.5 # time between NTSC frames
 DT_PAL				= 312 * 114 / 1773447.0 # time between PAL frames
-NTSC_TAG			= "%.02f" % (2*DT_NTSC) # "0.03"
 FPS_NTSC			= 59.94
 FPS_PAL				= 50
 
@@ -208,8 +207,7 @@ class POKEY(object):
 		# TODO: For now only, we'll only handle possibly tonal sounds.
 		# The noisier ones will have to be handled in a better way.
 		if self.poly[ch-1] not in [5,6,7]:
-			return 0
-		
+			return 27.5
 		
 		# TODO: figure out if the clock modifies fout of ch 4 and 2 or just 3 and 1
 		# It's unclear if Fin is technically considered 1.79 MHz for 4/2 getting clocked with 3/1
@@ -329,7 +327,8 @@ class POKEY(object):
 		else:
 			note = math.ceil(n)
 		
-		if note < -21 or note > 234 and self.vol[ch-1] > 0:
+		# if note < -21 or note > 234 and self.vol[ch-1] > 0:
+		if note < -21 or note > 90 and self.vol[ch-1] > 0: # note is far beyond the typical piano range
 			if DEBUG:
 				print("\nWarning: Couldn't handle audible note '%d' of POKEY %d, channel %d" % (
 					note, self.number, ch
@@ -468,6 +467,54 @@ class MIDI(object):
 	# Convert time in seconds to MIDI ticks
 	def timeToTicks(self, time):
 		return round( time * self.timebase * self.scaleFactor )
+	
+	def filterNotesByLength(self, cutoff):
+		print("Marking notes shorter than 1/%d of a beat..." % (1.0/cutoff))
+		notes = {} # current notes being played in each channel
+		filtered = [] # notes to filter
+		for tn, track in enumerate(self.tracks): # for each track
+			for t in sorted(track.keys()): # we go through the timestamps
+				for en, ev in enumerate(track[t]): # and each of their events
+					if ev[0] != "On": continue # we only care about Note On events
+					_, ch, key, vel = ev
+					if vel > 0: # NoteOn triggered
+						if (ch,key) not in notes: # If not a previously active note, mark it as active
+							notes[(ch,key)] = (t,ev) # save its track & event
+					else: # Otherwise, we have a NoteOff
+						# We now check for the length of the note
+						if (ch,key) in notes: # If it was previously active (we check just in case)
+							# Grab info about where it began
+							starttime, starten = notes[(ch,key)]
+							dur = t - starttime # compute duration (in MIDI ticks)
+							if (dur / self.timebase) < cutoff: # If duration lower than the cutoff, we filter it
+								# We append the 
+								filtered.append([
+									tn,
+									notes[(ch,key)],
+									(t,ev)
+								])
+							del notes[(ch,key)]
+						# else:
+							#print("Invalid off note found.")
+							#exit()
+		# We now have a list of notes to filter
+		print("%d note%s filtered" % (len(filtered), "s" if len(filtered) != 0 else ""))
+		for note in filtered: # We switch channel for these very short notes
+			tn, non, noff = note
+			
+			self.tracks[tn][non[0]].remove(non[1]) # remove NoteOn event
+			non[1][1] += 8 # tweak channel
+			# if non[1][1] >= 9: # skip percussion MIDI channel
+				# non[1][1] += 1
+			self.tracks[tn][non[0]].append(non[1]) # append tweaked NoteOn event
+			
+			# Do the same with the NoteOff
+			self.tracks[tn][noff[0]].remove(noff[1])
+			noff[1][1] += 8
+			# if noff[1][1] >= 9:
+				# noff[1][1] += 1 # skip percussion
+			self.tracks[tn][noff[0]].append(noff[1])
+			
 	
 	# Save MIDI to a path
 	def save(self, path):
@@ -645,6 +692,11 @@ class Converter(object):
 		self.UseInstruments = False
 		# Custom instruments to use
 		self.CustomInstruments = None
+		# Ignore volume information
+		self.PitchOnly = None
+		# Mark short notes
+		self.MarkShortNotes = False
+		self.ShortNoteCutoff = 1e3;
 	
 	# Get a string tag for a given voice
 	# A voice exists for each instrument for each channel for each POKEY
@@ -662,13 +714,20 @@ class Converter(object):
 		if not os.path.isfile(file):
 			print("File \"%s\" doesn't exist" % file)
 			return
-		self.file = file
 		
+		if os.path.splitext(os.path.basename(file))[1].lower() == "sap": # Wrong usage
+			print("Error: POKEY2MIDI does not convert SAP files directly to MIDI.")
+			print("       You must use ASAPSCAN and save the POKEY register dumps to a text file, then run POKEY2MIDI on the text file.")
+			print("       Download ASAP: http://asap.sourceforge.net/")
+			exit()
+		
+		self.file = file
 		
 		song = Song(self) # The song object which will handle things
 		
 		print("="*20 + "[ POKEY2MIDI v%s ]"%VERSION + "="*20)
 		print("Opening \"%s\"" % self.file)
+		
 		
 		# Detect MIME type
 		mime = mimetypes.guess_type(self.file)
@@ -683,11 +742,12 @@ class Converter(object):
 		with handle as fin:
 			print("Reading POKEY data...")
 			
-			# Detect NTSC or PAL, skip to 3rd line where we can tell them apart
-			for ln in range(3):
+			# Detect NTSC or PAL, skip to the 61st line, where we can tell them apart
+			# NTSC will have timestamp 1.00, PAL will have 1.20
+			for ln in range(61):
 				l = fin.readline()
 			
-			if l[0][:-1] == NTSC_TAG:
+			if l.split(":")[0].strip() == "1.00":
 				mode = NTSC
 				dt = DT_NTSC # the correct time between frames for NTSC
 			else:
@@ -720,7 +780,7 @@ class Converter(object):
 					last_data = [bytes.fromhex("00"*9)] * numPOKEY
 					print(
 						("Mode: Mono" if numPOKEY == 1 else "Stereo") + ", " + \
-						("NTSC (%.2f Hz)"%FPS_NTSC if mode == NTSC else "PAL (%.2f Hz)" % FPS_PAL)
+						("NTSC (%.2f Hz)" % FPS_NTSC if mode == NTSC else "PAL (%.2f Hz)" % FPS_PAL)
 					)
 				
 				# Compute timestamp by ourselves, for more precision
@@ -764,7 +824,7 @@ class Converter(object):
 			
 		# If we want to force a known tempo, we change the MIDI tempo and the scale factor
 		if self.ForceTempo is not None:
-			midi.scaleFactor =  self.ForceTempo / 60.0
+			midi.scaleFactor =  self.ForceTempo / DEFAULT_TEMPO
 			midi.tempo = self.ForceTempo
 		
 		# If we want to force a timebase, we do it now
@@ -824,6 +884,11 @@ class Converter(object):
 						ch_vol = midi_vol
 						midi_vol = 127
 					
+					# If we are only considering pitch changes, we discard volume information altogether
+					if self.PitchOnly:
+						ch_vol = 127 if vol > 0 else 0
+						midi_vol = 127 if vol > 0 else 0
+					
 					# If there's a note being played in the current channel of the current POKEY
 					if active_note[pn][ch] is not None:
 						kill = False
@@ -849,7 +914,7 @@ class Converter(object):
 								# Decaying sounds are usually used for decaying envelopes, so
 								# the natural decay of the MIDI note should work fine.
 								# Of course, only if we have set MergeDecays to True
-								if self.MergeDecays and active_note[pn][ch]['vol'] < vol:
+								if self.MergeDecays and active_note[pn][ch]['vol'] <= vol:
 									kill = True
 								# Note, however, that if a song uses a ramping up attack, this
 								# just results in many quick notes rising up in volume, which
@@ -943,6 +1008,9 @@ class Converter(object):
 						active_note[pn][ch]['note']
 					)
 		
+		if self.MarkShortNotes:
+			midi.filterNotesByLength(1.0 / self.ShortNoteCutoff)
+		
 		print("Saving MIDI file at \"%s\"" % output)
 		midi.save(output)
 		
@@ -986,7 +1054,7 @@ class Converter(object):
 				# We display them
 				print("Possible tempos (in bpm):")
 				for c, s in enumerate(reversed(sorted(suggestions))):
-					bpm = 60 / (dt * s) # frames per beat to beats per minute
+					bpm = 60 / (dt * s) # frames per beat to beats per minute - ToDo: shouldn't this be 60/50 for NTSC/PAL?
 					print("    %16.12f" % bpm, end="")
 					if c % 4 == 3 or c == len(suggestions)-1:
 						print("")
@@ -1004,11 +1072,13 @@ if __name__ == "__main__":
 	parser.add_argument('--nosplit', action='store_false', help="Do not split different polynomial counter settings for channels as separate instrument tracks, which happens by default.")
 	parser.add_argument('--nomerge', action='store_false', help="Do not merge volume decays into a single MIDI note, which happens by default. Ignored if --all is used.")
 	parser.add_argument('--usevol', action='store_true', help="Use MIDI channel volume instead of note velocity. This is similar to how it happens in the actual chip.")
+	parser.add_argument('--pitchonly', action='store_true', help="Completely ignores note volume information, and considers only pitch changes when triggering notes. This is similar to --usevol, but the MIDI file will contain no channel volume MIDI messages.")
 	parser.add_argument('--useinst', action='store_true', help="Assign predefined MIDI instruments to emulate the original POKEY sound. Also use --setinst if you wish to define different instruments yourself.")
-	parser.add_argument('--short', action='store_true', help="Use shorter MIDI track names.")
+	parser.add_argument('--shortnotes', metavar="k", nargs=1, type=int, help="Assigns notes shorter than 1/k-th of a beat to separate channels. Useful for cleaning up certain songs, but may map certain notes to MIDI percussion (channel 10). Note: for now, this feature implies --nosplit.")
+	parser.add_argument('--shortnames', action='store_true', help="Use shorter MIDI track names.")
 	parser.add_argument('--setinst', metavar='n,n,n,n,n,n,n,n', nargs=1, type=str, help="Specify which General MIDI instruments to assign to each of the 8 poly settings. No spaces, n from 0 to 127. The last three are the most important for melody and default to: square wave=80, brass+lead=87, square wave=80.")
 	parser.add_argument('--boost', metavar='factor', nargs=1, type=float, help="Multiply note velocities by a factor. Useful if MIDI is too quiet. Use a large number (> 16) to make all notes have the same max loudness (useful for killing off POKEY effects that don't translate well to MIDI).")
-	parser.add_argument('--maxtime', metavar='time', nargs=1, type=float, help="By default, asapscan dumps 15 minutes (!) of POKEY data. Use this to ignore stuff after some point.")
+	parser.add_argument('--maxtime', metavar='time', nargs=1, type=float, help="By default, asapscan dumps 15 minutes (!) of POKEY data. Use this to ignore stuff after some point. Value is given is seconds, fractional values are allowed.")
 	parser.add_argument('--bpm', nargs=1, type=float, help="Assume a given tempo in beats per minute (bpm), as precisely as you want. Default is %d. If the song's bpm is known precisely, this option makes the MIDI notes align with the beats, which makes using the MIDI in other places much easier. Doesn't work if the song has a dynamic tempo." % DEFAULT_TEMPO)
 	parser.add_argument('--findbpm', action='store_true', help="Attempts to post-process the data to automatically detect tempo/bpm by using a simple algorithm. The best guesses are merely displayed after the conversion. Run again with one of these guesses as a parameter with --bpm to see if events aligned properly. Cannot be used with --all, but might work better with --usevol.")
 	parser.add_argument('--timebase', nargs=1, type=int, help="Force a given MIDI timebase, the number of ticks in a beat (quarter note). Default is %d." % DEFAULT_TIMEBASE)
@@ -1025,9 +1095,10 @@ if __name__ == "__main__":
 	converter.AlwaysRetrigger = args.all
 	converter.MergeDecays = args.nomerge
 	converter.TrimSilence = args.notrim
-	converter.ShortTrackNames = args.short
+	converter.ShortTrackNames = args.shortnames
 	converter.SplitPolyAsTracks = args.nosplit
 	converter.UseChannelVolume = args.usevol
+	converter.PitchOnly = args.pitchonly
 	converter.UseInstruments = args.useinst
 	converter.DetectTempo = args.findbpm
 	if args.boost is not None:
@@ -1042,6 +1113,10 @@ if __name__ == "__main__":
 		insts = [min(127,max(0,int(i) if len(i) else 0)) for i in args.setinst[0].split(',')]
 		insts += [0]*(8-len(insts))
 		converter.CustomInstruments = insts
+	if args.shortnotes is not None:
+		converter.MarkShortNotes = True
+		converter.SplitPolyAsTracks = False
+		converter.ShortNoteCutoff = args.shortnotes[0]
 	
 	input = args.input[0]
 	

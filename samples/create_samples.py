@@ -15,8 +15,8 @@ python3 = "python"
 # Path to pokey2midi.py
 pokey2midi_path = os.path.join("..","pokey2midi.py")
 # Options to use
-pokey2midi_options = ["--useinst", "--usevol", "--maxtime", "300"]
-# pokey2midi_options = ["--debug","--short"] # for orchestrating
+# pokey2midi_options = ["--useinst", "--usevol", "--maxtime", "300"]
+pokey2midi_options = ["--shortnotes", "16"] # for orchestrating
 
 # Which subsongs to extract from each file. Defaults to [0]
 subsongs = {

@@ -1,27 +1,27 @@
 # POKEY2MIDI
-POKEY2MIDI is a tool (using Python 3) to convert POKEY register dumps from Atari SAP files into MIDI music files.
+POKEY2MIDI is a tool (using Python 3) to convert **POKEY register dumps** from Atari SAP files into MIDI music files. (It cannot convert SAP files directly into MIDI files.)
 
-The main motivation for writing this program was for me to transcribe Atari SAP music as MIDI to be later imported in other music composition programs. I wanted this to try my hand at orchestrating some Atari music. [You can hear some examples here](https://www.youtube.com/playlist?list=PLhN15Dz2BRan93isRGIoDycl-d8ux81Rq).
+The main motivation for writing this program was for me to transcribe Atari SAP music as MIDI, to be later imported in other music composition programs. I wanted this to try my hand at orchestrating some Atari music. [You can hear some examples here](https://www.youtube.com/playlist?list=PLhN15Dz2BRan93isRGIoDycl-d8ux81Rq).
 
-As such, I needed a tool that was accurate, and which also separated potential instruments/voices and aligned MIDI notes to the musical bars.
+As such, I needed a tool that was accurate, and which also separated potential instruments/voices and aligned MIDI notes to the musical bars. This makes POKEY2MIDI's approach to transcribing MIDI files different than other "video game music" MIDI converters: slides are not translated to pitch bends, but as note retriggers.
 
 ---
 # Features
 
 POKEY2MIDI has many options you can toggle on or off to customize the output. These include:
 
-* Can merge decaying notes as a single MIDI note.
+* Can merge decaying notes as a single MIDI note. Volume information may also be ignored completely to extract only the note transitions.
 * Maps POKEY channel volume either to note velocity (loudness of each note) or MIDI channel volume.
-* Splits notes per channel of each POKEY, or even per poly per channel per POKEY.
+* Splits notes per channel of each POKEY, or even per poly per channel per POKEY. This allows you to easily pick apart the different "voices" and instrumentation used in the music.
 * Trims initial silence so notes are aligned to MIDI bars.
-* Map MIDI instruments to each poly setting, or just leave it unmapped.
-* No pitch bend, because pitch bends suck!
-* Boost loudness of notes.
+* Maps MIDI instruments to each poly setting, or just leave it unmapped.
+* No pitch bend, because pitch bends suck! It only makes it more difficult for transcribing.
+* Boosts loudness of notes.
 * Save MIDIs with a specific max duration.
-* Use a known song tempo to precisely align MIDI events to the bars, making the transcription more useful to use elsewhere. Doesn't affect playback/perceptual speed.
+* Use a known song tempo to precisely align MIDI events to the bars, making the transcription more useful to use elsewhere. Doesn't affect playback/perceptual speed, but it won't work for tracks that change tempo or use some irregular timing structure.
 * Also includes a simple (but usually effective) algorithm to detect the precise tempo of songs. Many possibilities are suggested, and one of them is usually right. It's often easy to tell which one, especially if used in conjunction with a [tap-based bpm detector](https://www.google.com/search?hl=en&q=bpm+tap+online).
 
-Noise and special effects (highpass filters) are not yet handled, but will be included at some point. The idea is to map noises into percussions.
+Noise and special effects (highpass filters) are not yet handled, but will be included at some point. The idea is to map noises into percussions eventually.
 
 ---
 # Instructions
@@ -55,44 +55,66 @@ POKEY2MIDI also accepts bzip2-compressed text files, but that's not necessary. I
 
     optional arguments:
       -h, --help            show this help message and exit
+    
       --all                 Use all notes by always retriggering. Useful for when
                             notes are being missed. Overrides note merging.
+      
       --notrim              Do not trim initial silence, which happens by default.
+      
       --nosplit             Do not split different polynomial counter settings for
                             channels as separate instrument tracks, which happens
                             by default.
+      
       --nomerge             Do not merge volume decays into a single MIDI note,
                             which happens by default. Ignored if --all is used.
+      
       --usevol              Use MIDI channel volume instead of note velocity. This
                             is similar to how it happens in the actual chip.
+      
+      --pitchonly           Completely ignores note volume information, and considers
+                            only pitch changes when triggering notes. This is similar
+                            to --usevol, but the MIDI file will contain no channel
+                            volume MIDI messages.
+      
       --useinst             Assign predefined MIDI instruments to emulate the
                             original POKEY sound. Also use --setinst if you wish
                             to define different instruments yourself.
-      --short               Use shorter MIDI track names.
+      
+      --shortnotes            Assigns notes shorter than 1/k-th of a beat to separate
+                            channels. Useful for cleaning up certain songs, but may
+                            map certain notes to MIDI percussion (channel 10)
+      
+      --shortnames          Use shorter MIDI track names.
+      
       --setinst n,n,n,n,n,n,n,n
                             Specify which General MIDI instruments to assign to
                             each of the 8 poly settings. No spaces, n from 0 to
                             127. The last three are the most important for melody
                             and default to: square wave=80, brass+lead=87, square
                             wave=80.
+      
       --boost factor        Multiply note velocities by a factor. Useful if MIDI
                             is too quiet. Use a large number (> 16) to make all
                             notes have the same max loudness (useful for killing
                             off POKEY effects that don't translate well to MIDI).
+      
       --maxtime time        By default, asapscan dumps 15 minutes (!) of POKEY
                             data. Use this to ignore stuff after some point.
+      
       --bpm BPM             Assume a given tempo in beats per minute (bpm), as
                             precisely as you want. Default is 60. If the song's
                             bpm is known precisely, this option makes the MIDI
                             notes align with the beats, which makes using the MIDI
                             in other places much easier. Doesn't work if the song
                             has a dynamic tempo.
+      
       --findbpm             Attempts to post-process the data to automatically
                             detect tempo/bpm by using a simple algorithm. The best
                             guesses are merely displayed after the conversion. Run
                             again with one of these guesses as a parameter with
                             --bpm to see if events aligned properly. Cannot be
                             used with --all, but might work better with --usevol.
+      
       --timebase TIMEBASE   Force a given MIDI timebase, the number of ticks in a
                             beat (quarter note). Default is 480.
 ---
