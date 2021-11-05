@@ -914,7 +914,7 @@ class Converter(object):
 								# Decaying sounds are usually used for decaying envelopes, so
 								# the natural decay of the MIDI note should work fine.
 								# Of course, only if we have set MergeDecays to True
-								if self.MergeDecays and active_note[pn][ch]['vol'] <= vol:
+								if self.MergeDecays and active_note[pn][ch]['vol'] < vol:
 									kill = True
 								# Note, however, that if a song uses a ramping up attack, this
 								# just results in many quick notes rising up in volume, which
