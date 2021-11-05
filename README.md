@@ -80,7 +80,7 @@ POKEY2MIDI also accepts bzip2-compressed text files, but that's not necessary. I
                             original POKEY sound. Also use --setinst if you wish
                             to define different instruments yourself.
       
-      --shortnotes            Assigns notes shorter than 1/k-th of a beat to separate
+      --shortnotes          Assigns notes shorter than 1/k-th of a beat to separate
                             channels. Useful for cleaning up certain songs, but may
                             map certain notes to MIDI percussion (channel 10)
       
