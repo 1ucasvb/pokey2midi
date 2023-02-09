@@ -136,9 +136,9 @@ Some note frequencies are also not being mapped properly to anything useful, esp
 ---
 # Atari SAP Music Archive (ASMA) conversion to MIDI
 
-With many thanks to [Gades](https://gadesound.blogspot.com/), the Atari SAP Music Archive up to November 13 2020 has been converted to MIDI using POKEY2MIDI! Most of the tracks were converted with the correct BPM correction, so their notes should be aligned to the musical bars. This full archive can be downloaded here: https://atarionline.pl/pliki/gades_asma_38_mid2.zip
+With many thanks to [Konrad "Gades" Leśniak](https://gadesound.blogspot.com/), the Atari SAP Music Archive (up to November 16 2020) has been converted using POKEY2MIDI! Most of the tracks were converted with the proper BPM correction, so their notes should be aligned to the musical bars. This full archive can be downloaded here: https://atarionline.pl/pliki/gades_asma_38_mid2.zip
 
-For more information and details, see:
+For more information and details on how this was achieved, see:
 * [Original Atarionline.pl blog post](https://atarionline.pl/v01/index.php?subaction=showfull&id=1604707110&archive=&start_from=0&ucat=1&ct=nowinki)
 * [Gades' blog post on the process](https://gadesound.blogspot.com/2020/11/sap-na-midi-najlepszy-sposob.html)
 
