@@ -142,7 +142,7 @@ For more information and details on how this was achieved, see:
 * [Original Atarionline.pl blog post](https://atarionline.pl/v01/index.php?subaction=showfull&id=1604707110&archive=&start_from=0&ucat=1&ct=nowinki)
 * [Gades' blog post on the process](https://gadesound.blogspot.com/2020/11/sap-na-midi-najlepszy-sposob.html)
 
-Note that these conversions have used the default parameters for POKEY2MIDI, which may not be exactly ideal for a specific SAP file, or not the kind of MIDI file you wanted. I also think just the default subsongs were converted, as some subsongs seem to be missing from the archive. But this should still cover 90% of uses. :)
+Note that these conversions have used the default parameters for POKEY2MIDI, which may not be exactly ideal for a specific SAP file, or not the kind of MIDI file you wanted. It seems subsongs were converted as well, but appear concatenated in the same file. I am unsure how this changes the BPM alignments, but hopefully, this archive will cover 90% of cases. :)
 
 ---
 
