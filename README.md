@@ -134,5 +134,16 @@ The white/pink-noise-like polys 1=001 and 4=100 are being ignored for now. Polys
 Some note frequencies are also not being mapped properly to anything useful, especially when songs use 16-bit or the 1.79 MHz clock. I opted to omit these for now until I figure what to do as well.
 
 ---
+# Atari SAP Music Archive (ASMA) conversion to MIDI
+
+With many thanks to [Gades](https://gadesound.blogspot.com/), the Atari SAP Music Archive up to November 13 2020 has been converted to MIDI using POKEY2MIDI! Most of the tracks were converted with the correct BPM correction, so their notes should be aligned to the musical bars. This full archive can be downloaded here: https://atarionline.pl/pliki/gades_asma_38_mid2.zip
+
+For more information and details, see:
+* [Original Atarionline.pl blog post](https://atarionline.pl/v01/index.php?subaction=showfull&id=1604707110&archive=&start_from=0&ucat=1&ct=nowinki)
+* [Gades' blog post on the process](https://gadesound.blogspot.com/2020/11/sap-na-midi-najlepszy-sposob.html)
+
+Note that these conversions have used the default parameters for POKEY2MIDI, which may not be exactly ideal for a specific SAP file, or not the kind of MIDI file you wanted. I also think just the default subsongs were converted, as some subsongs seem to be missing from the archive. But this should still cover 90% of uses. :)
+
+---
 
 Some tags to help others looking for this program: pokey2mid, sap2mid, sap2midi, POKEY to MID, SAP to MIDI, SAP to MID
